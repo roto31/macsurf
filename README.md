@@ -17,32 +17,6 @@
   <em>MacSurf 2.0.5 on a Power Mac G3 iMac, rendering <a href="https://hackaday.com/">hackaday.com</a> at full desktop width over native HTTPS.</em>
 </p>
 
----
-
-<table>
-<tr>
-<td width="50%" valign="top" align="center">
-
-### 🆓 Free monthly stable
-
-A tested build on [**macsurf.org**](https://macsurf.org), free for everyone, with real hardware testing behind it.
-
-**Latest stable: MacSurf 2.3 "OPEN TABS"**
-
-</td>
-<td width="50%" valign="top" align="center">
-
-### ⭐ Weekly, for supporters
-
-In-progress builds land in **Beta-Box** every week, ahead of every stable release, with dev notes along the way.
-
-[**Become a supporter →**](https://github.com/sponsors/mplsllc)
-
-</td>
-</tr>
-</table>
-
-<p align="center"><sub>Every project stays free as source. Build it yourself and you never need Beta-Box. You are paying for the build and the cadence, not for access.</sub></p>
 
 <p align="center"><strong>Support development</strong></p>
 <p align="center">

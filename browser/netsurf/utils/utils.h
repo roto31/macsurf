@@ -59,6 +59,9 @@
 #if defined(_WIN32)
 /** windows mkdir function */
 #define nsmkdir(dir, mode) mkdir((dir))
+#elif defined(__MACOS9__)
+/** MSL has no mkdir; frontends/macos9/misc_stub.c supplies nsmkdir */
+int nsmkdir(const char *path, int mode);
 #else
 /** POSIX mkdir function */
 #define nsmkdir(dir, mode) mkdir((dir), (mode))

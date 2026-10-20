@@ -62,6 +62,9 @@ hardware; no binary has been published.
   `utils/ns_time.h`); `about.c` and `about/config.c` include `content/fetchers/about/config.h`
   by full path so another library's `config.h` is not picked up; `image_cache.c` calls
   `(*centry->convert)(...)`, which MWCC 8.3 accepts.
+- Link error `undefined: 'mkdir'` from `ns_file.c`: MSL for Carbon has no `mkdir`, and the POSIX
+  `nsmkdir` macro in `utils/utils.h` won once the include search order was fixed. On Mac OS 9
+  `nsmkdir` is now the existing no-op stub in `misc_stub.c`, as in the MacSurf v2.3 binary.
 - `misc.c`'s Internet Config calls compiled without prototypes: `macos9.h` suppresses
   `InternetConfig.h` for Carbon.h, so the include was a no-op. Declarations now come from
   [`macos9_ic.h`](browser/netsurf/frontends/macos9/macos9_ic.h).

@@ -231,7 +231,7 @@ static void macos9_init_menus(void) {
 #ifdef __MACOS9__
 	MenuHandle apple_menu, file_menu, edit_menu, go_menu;
 	apple_menu = NewMenu(MENU_APPLE, "\p\024");
-	AppendMenu(apple_menu, "\pAbout MacSurf\311");
+	AppendMenu(apple_menu, "\pAbout Lotus Navigator\311");
 	AppendMenu(apple_menu, "\pPreferences\311/,");   /* item 2 - Cmd-, */
 	AppendMenu(apple_menu, "\p(-");
 	/* fixes753 (#228) - do NOT AppendResMenu('DRVR') here. Under Carbon /
@@ -251,6 +251,9 @@ static void macos9_init_menus(void) {
 	AppendMenu(file_menu, "\pSend Debug Log");   /* fixes720 (item 4) */
 	AppendMenu(file_menu, "\p(-");
 	AppendMenu(file_menu, "\pQuit/Q");
+#ifndef LOTUS_DEBUG_LOG_UPLOAD_URL
+	DisableMenuItem(file_menu, ITEM_FILE_SENDLOG);
+#endif
 	InsertMenu(file_menu, 0);
 
 	edit_menu = NewMenu(MENU_EDIT, "\pEdit");
@@ -333,7 +336,7 @@ static void macos9_init_menus(void) {
  * serves it without an https redirect. */
 static void macos9_send_debug_log(struct gui_window *gw)
 {
-#ifdef __MACOS9__
+#if defined(__MACOS9__) && defined(LOTUS_DEBUG_LOG_UPLOAD_URL)
 	char *raw;
 	char *body;
 	long  rawlen, i, bp;
@@ -368,7 +371,7 @@ static void macos9_send_debug_log(struct gui_window *gw)
 	body[bp] = '\0';
 	free(raw);
 
-	if (nsurl_create("http://macsurf.org/upload.php", &url) == NSERROR_OK) {
+	if (nsurl_create(LOTUS_DEBUG_LOG_UPLOAD_URL, &url) == NSERROR_OK) {
 		macsurf_profile_reset();
 		/* post_urlenc is arg 5; core strdup's it, so freeing body after is
 		 * safe. Navigates the front window to the "thank you" response. */

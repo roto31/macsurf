@@ -1018,7 +1018,7 @@ static void prefs_paint(struct prefs_win *pw)
 		RGBForeColor(&gray_c);
 		TextFont(3); TextSize(9);
 		MoveTo(24, 126);
-		DrawString("\pStandard text size for web pages (MacSurf default is 12 pt / 16 px).");
+		DrawString("\pStandard text size for web pages (default is 12 pt / 16 px).");
 		MoveTo(24, 190);
 		DrawString("\pSmallest size text will be allowed to shrink to on detailed pages.");
 		break;

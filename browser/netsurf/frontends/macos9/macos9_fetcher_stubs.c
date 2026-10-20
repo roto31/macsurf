@@ -26,6 +26,7 @@
 #include "nsutils/base64.h"
 
 #include "macsurf_debug.h"
+#include "lotus_brand.h"
 
 /* ---- Embedded CSS resources ---- *
  *
@@ -495,7 +496,7 @@ stub_body_for(const struct stub_fetch_ctx *ctx,
 			return;
 		}
 		*body_out = "<html><head><title>about:</title></head>"
-			    "<body><h1>MacSurf</h1></body></html>";
+			    "<body><h1>" LOTUS_APP_NAME "</h1></body></html>";
 		*len_out = strlen(*body_out);
 		*mime_out = "text/html";
 		return;
@@ -713,7 +714,7 @@ stub_setup_scheme(struct fetch *parent_fetch, struct nsurl *url,
 			    "ul{font-size:12pt;color:#444444;}"
 			    "a{color:#003366;}</style></head>"
 			    "<body><h1>%s</h1>"
-			    "<p>MacSurf tried to reach:</p>"
+			    "<p>" LOTUS_APP_NAME " tried to reach:</p>"
 			    "<p><tt>%.512s</tt></p>"
 			    "%s"
 			    "<p>You can <a href=\"%.512s\">retry the same URL</a>, "
@@ -724,7 +725,7 @@ stub_setup_scheme(struct fetch *parent_fetch, struct nsurl *url,
 			    failed_url,
 			    is_time ?
 			      "<p>The certificate is expired or not yet valid, so "
-			      "MacSurf did <b>not</b> load the page over an "
+			      LOTUS_APP_NAME " did <b>not</b> load the page over an "
 			      "unencrypted connection.</p>"
 			      "<p>A Mac whose clock is wrong sees valid "
 			      "certificates as expired. If the date below looks "
@@ -732,7 +733,7 @@ stub_setup_scheme(struct fetch *parent_fetch, struct nsurl *url,
 			      "panel and reload; if it looks right, the "
 			      "certificate really has expired.</p>"
 			    : is_cert ?
-			      "<p>MacSurf checked the site's certificate, could "
+			      "<p>" LOTUS_APP_NAME " checked the site's certificate, could "
 			      "not verify it, and did <b>not</b> fall back to an "
 			      "unencrypted connection.</p>"
 			    :
@@ -800,7 +801,7 @@ stub_setup_scheme(struct fetch *parent_fetch, struct nsurl *url,
 				"h1{color:#002030;}p{line-height:1.5;}"
 				"</style></head><body>"
 				"<h1>about:memory</h1>"
-				"<p>MacSurf is a Carbon CFM application with a "
+				"<p>" LOTUS_APP_NAME " is a Carbon CFM application with a "
 				"16 MB preferred / 8 MB minimum partition. "
 				"libcss / libdom / libhubbub each maintain their "
 				"own arenas; memory usage scales with page DOM "

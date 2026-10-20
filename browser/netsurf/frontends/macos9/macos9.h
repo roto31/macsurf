@@ -24,6 +24,8 @@ struct rect;
 #include <stdlib.h>
 #include <stdint.h>
 
+#include "lotus_brand.h"
+
 #ifdef __MACOS__
 	#ifndef TARGET_API_MAC_CARBON
 		#define TARGET_API_MAC_CARBON 1

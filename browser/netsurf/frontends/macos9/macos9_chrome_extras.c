@@ -3035,7 +3035,7 @@ static OSErr chrome_fsspec_write_all(short vRef, long dirID,
 	OSErr err;
 	err = FSMakeFSSpec(vRef, dirID, name, &spec);
 	if (err == fnfErr) {
-		err = FSpCreate(&spec, 'MPLS', 'TEXT', smSystemScript);
+		err = FSpCreate(&spec, LOTUS_APP_CREATOR, 'TEXT', smSystemScript);
 		if (err == noErr)
 			err = FSMakeFSSpec(vRef, dirID, name, &spec);
 	}
@@ -4028,7 +4028,7 @@ static void about_draw(GWorldPtr off, WindowRef win, const Rect *content,
 
 	/* 4. title with a sweeping metallic shine */
 	{
-		const char *tt = "MacSurf 2.3";
+		const char *tt = LOTUS_APP_NAME " " LOTUS_APP_VERSION;
 		short n = (short)strlen(tt), tw, tx, ty = 100;
 		TextFont(titleFnum);
 		TextFace(bold);
@@ -4065,7 +4065,7 @@ static void about_draw(GWorldPtr off, WindowRef win, const Rect *content,
 		TextSize(9);
 		TextFace(normal);
 		about_fore(120, 145, 190, bri);
-		about_center("Native TLS 1.3   -   by mplsllc", 190, 128);
+		about_center("Built on MacSurf by mplsllc   -   Native TLS 1.3", 190, 128);
 		about_fore(150, 165, 200, bri);
 		about_center("For Gary & Kaija", 190, 143);
 	}
@@ -4215,7 +4215,7 @@ void macos9_about_show(void)
 			&wb, &win) != noErr || win == NULL)
 		goto fallback;
 
-	SetWTitle(win, "\pAbout MacSurf");
+	SetWTitle(win, "\pAbout Lotus Navigator");
 	GetPort(&savedPort);
 	SetPortWindowPort(win);
 
@@ -4340,10 +4340,10 @@ fallback:
 		Str255 ptitle, pbody;
 		size_t blen;
 		const char *title =
-			"MacSurf 2.3 - a web browser for Classic Mac OS 9";
+			LOTUS_APP_NAME " " LOTUS_APP_VERSION " - a web browser for Mac OS 9 and Mac OS X";
 		size_t tlen = strlen(title);
 
-		strcpy(p, "Native TLS 1.3 via macTLS. Built on NetSurf.\r"
+		strcpy(p, "Native TLS 1.3 via macTLS. Built on MacSurf and NetSurf.\r"
 			"by mplsllc\r\r");
 		p += strlen(p);
 		for (i = 0; i < ABOUT_ROLL_N; i++) {

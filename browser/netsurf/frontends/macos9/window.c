@@ -1598,7 +1598,7 @@ static struct gui_window *macos9_window_create(struct browser_window *bw, struct
 	g->bw=bw; if(CreateNewWindow(6, 0x1F, &b, &g->window)!=0) { free(mw); free(g); return NULL; }
 	/* Set scaffold's canonical window ref too */
 	mw->window = g->window;
-	SetWRefCon(g->window,(long)g); SetPortWindowPort(g->window); SetWTitle(g->window,(const unsigned char*)"\pMacSurf");
+	SetWRefCon(g->window,(long)g); SetPortWindowPort(g->window); SetWTitle(g->window,(const unsigned char*)"\pLotus Navigator");
 	g->next_global=window_list; window_list=g;
 	/* fixes300/fixes723 - 36x36 square buttons (was 32x32, ~12.5% bigger).
 	 * Vertically centered inside the 48-tall toolbar: top=6, bottom=42,
@@ -3144,7 +3144,7 @@ void macos9_tab_switch(struct macos9_window *mw, struct gui_window *new_tab)
 	/* Restore the new tab's title */
 	{
 		Str255 ptitle;
-		const char *t = (new_tab->title[0] != '\0') ? new_tab->title : "MacSurf";
+		const char *t = (new_tab->title[0] != '\0') ? new_tab->title : LOTUS_APP_NAME;
 		size_t len = strlen(t);
 		if (len > 255) len = 255;
 		ptitle[0] = (unsigned char)len;

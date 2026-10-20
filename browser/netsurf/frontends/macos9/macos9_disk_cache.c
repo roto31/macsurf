@@ -25,6 +25,7 @@
 
 #include "macos9_disk_cache.h"
 #include "macsurf_debug.h"
+#include "lotus_brand.h"
 #include "utils/nsoption.h"
 
 #include <string.h>
@@ -1371,7 +1372,7 @@ void macos9_bookmarks_save(const char *buf, long len)
 
 	err = FSMakeFSSpec(vRef, dirID, fname, &spec);
 	if (err == fnfErr) {
-		err = FSpCreate(&spec, 'MPLS', 'TEXT', smSystemScript);
+		err = FSpCreate(&spec, LOTUS_APP_CREATOR, 'TEXT', smSystemScript);
 		if (err != noErr) return;
 		err = FSMakeFSSpec(vRef, dirID, fname, &spec);
 		if (err != noErr) return;
@@ -1474,7 +1475,7 @@ void macos9_history_save(const char *buf, long len)
 
 	err = FSMakeFSSpec(vRef, dirID, fname, &spec);
 	if (err == fnfErr) {
-		err = FSpCreate(&spec, 'MPLS', 'TEXT', smSystemScript);
+		err = FSpCreate(&spec, LOTUS_APP_CREATOR, 'TEXT', smSystemScript);
 		if (err != noErr) return;
 		err = FSMakeFSSpec(vRef, dirID, fname, &spec);
 		if (err != noErr) return;

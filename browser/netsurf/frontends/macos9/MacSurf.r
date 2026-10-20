@@ -21,7 +21,7 @@
  *     ics8 (128)     — 16x16 8-bit small colour
  *
  *   FREF (128)       — file type 'APPL' mapped to icon local-ID 0
- *   BNDL (128)       — creator 'MPLS' binding ICN# 128 + FREF 128
+ *   BNDL (128)       — creator 'LtsN' binding ICN# 128 + FREF 128
  *
  * Build paths:
  *   * Mac side (Rez under CodeWarrior 8): MacSurf.r is the canonical
@@ -32,7 +32,7 @@
  *     resources; keep MacSurf.r and MacSurf.rsrc in sync by running
  *     the script after editing puffpuff.png.
  *
- * Creator code is uppercase 'MPLS'. Classic Mac type/creator codes
+ * Creator code is 'LtsN' (Lotus Navigator; upstream MacSurf uses MPLS). Classic Mac type/creator codes
  * are case-sensitive; do not change this to 'mpls' or similar.
  * ----------------------------------------------------------------------- */
 
@@ -72,15 +72,15 @@ data 'plst' (0) {
 	"<plist version=\"1.0\">\n"
 	"<dict>\n"
 	"\t<key>CFBundleName</key>\n"
-	"\t<string>MacSurf</string>\n"
+	"\t<string>Lotus Navigator</string>\n"
 	"\t<key>CFBundleIdentifier</key>\n"
-	"\t<string>org.macsurf.MacSurf</string>\n"
+	"\t<string>org.lotushomeacademy.LotusNavigator</string>\n"
 	"\t<key>CFBundleVersion</key>\n"
-	"\t<string>2.3</string>\n"
+	"\t<string>0.1.0</string>\n"
 	"\t<key>CFBundleShortVersionString</key>\n"
-	"\t<string>2.3</string>\n"
+	"\t<string>0.1.0</string>\n"
 	"\t<key>CFBundleSignature</key>\n"
-	"\t<string>MPLS</string>\n"
+	"\t<string>LtsN</string>\n"
 	"\t<key>CFBundlePackageType</key>\n"
 	"\t<string>APPL</string>\n"
 	"\t<key>CFBundleInfoDictionaryVersion</key>\n"
@@ -107,15 +107,15 @@ type 'vers' {
 };
 
 resource 'vers' (1) {
-	0x02, 0x30, final, 0x00, verUS,
-	"2.3",
-	"MacSurf 2.3"
+	0x00, 0x10, final, 0x00, verUS,
+	"0.1.0",
+	"Lotus Navigator 0.1.0"
 };
 
 resource 'vers' (2) {
-	0x02, 0x30, final, 0x00, verUS,
-	"2.3",
-	"MacSurf 2.3"
+	0x00, 0x10, final, 0x00, verUS,
+	"0.1.0",
+	"Lotus Navigator 0.1.0"
 };
 
 /* Icon family + FREF + BNDL. Generated; do not hand-edit. */

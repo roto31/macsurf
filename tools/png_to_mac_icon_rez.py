@@ -768,6 +768,9 @@ def main() -> int:
                     help="CFBundleIdentifier for the 'plst' (0) Info.plist "
                          "read by Mac OS X LaunchServices "
                          "(default: org.macsurf.MacSurf)")
+    ap.add_argument("--bundle-name", default=None,
+                    help="CFBundleName for the 'plst' (0) Info.plist "
+                         "(default: first word of the long version string)")
     args = ap.parse_args()
 
     if len(args.creator) != 4:
@@ -836,7 +839,7 @@ def main() -> int:
     # CFM app a real CFBundle identity instead of launching it anonymously
     # (fixes936). Version string is kept in lockstep with 'vers' above.
     plst = build_plst_resource(
-        bundle_name=vlong.split(" ")[0] if vlong else "MacSurf",
+        bundle_name=args.bundle_name or (vlong.split(" ")[0] if vlong else "MacSurf"),
         identifier=args.bundle_id,
         short_ver=args.version,
         creator=args.creator,

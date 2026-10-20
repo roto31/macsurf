@@ -16,7 +16,9 @@
 #include <Types.h>
 #include <DateTimeUtils.h>      /* GetDateTime */
 #include <OSUtils.h>            /* ReadLocation, MachineLocation */
+#include <Events.h>             /* TickCount */
 #else
+static UInt32 TickCount(void) { return 0; }
 /* Non-CW8 syntax check. GetDateTime / ReadLocation are Toolbox calls --
  * under Retro68 we stub them so the file parses and the math is exercised
  * at the type-system level. */
@@ -55,18 +57,39 @@ static void ReadLocation(MachineLocation *l) { l->u.gmtDelta = 0; }
  */
 #define OSTLS_UNIX_TO_2000_OFFSET    946684800UL
 
+#define OSTLS_TICKS_PER_SECOND       60UL
 
-OSErr
-OSTLS_GetBearSSLTime(UInt32 *out_days, UInt32 *out_seconds)
+static int    gHasTrustedTime = 0;
+static UInt32 gTrustedUnixSeconds = 0;
+static UInt32 gTrustedTicks = 0;
+
+
+void
+OSTLS_SetTrustedUnixTime(UInt32 unix_seconds)
+{
+    gTrustedUnixSeconds = unix_seconds;
+    gTrustedTicks = TickCount();
+    gHasTrustedTime = 1;
+}
+
+void
+OSTLS_ClearTrustedTime(void)
+{
+    gHasTrustedTime = 0;
+}
+
+int
+OSTLS_HasTrustedTime(void)
+{
+    return gHasTrustedTime;
+}
+
+
+/* Local Mac clock as GMT Unix seconds; kOSTLSTimeClockBefore2000 if pre-1970. */
+static OSErr
+local_clock_unix_seconds(UInt32 *out_unix_seconds)
 {
     UInt32 mac_seconds;
-    UInt32 unix_seconds;
-    UInt32 unix_days;
-    UInt32 seconds_of_day;
-
-    if (out_days == NULL || out_seconds == NULL) {
-        return (OSErr)kOSTLSTimeBadArgs;
-    }
 
     mac_seconds = 0;
     GetDateTime(&mac_seconds);
@@ -106,16 +129,43 @@ OSTLS_GetBearSSLTime(UInt32 *out_days, UInt32 *out_seconds)
      * in unsigned arithmetic; catch that as the same "clock before
      * 2000" failure since we won't get a usable date in either case. */
     if (mac_seconds < OSTLS_MAC_TO_UNIX_OFFSET) {
-        *out_days = 0;
-        *out_seconds = 0;
         return (OSErr)kOSTLSTimeClockBefore2000;
     }
-    unix_seconds = mac_seconds - OSTLS_MAC_TO_UNIX_OFFSET;
+    *out_unix_seconds = mac_seconds - OSTLS_MAC_TO_UNIX_OFFSET;
+    return (OSErr)kOSTLSTimeOK;
+}
 
-    /* Reject Mac clocks set before 2000-01-01 -- post-2000-issued
-     * certs would look not-yet-valid against such a "now" and the
-     * resulting validation cascade hides the root cause. */
-    if (unix_seconds < OSTLS_UNIX_TO_2000_OFFSET) {
+
+OSErr
+OSTLS_GetBearSSLTime(UInt32 *out_days, UInt32 *out_seconds)
+{
+    UInt32 unix_seconds;
+    UInt32 unix_days;
+    UInt32 seconds_of_day;
+    OSErr  clock_err;
+
+    if (out_days == NULL || out_seconds == NULL) {
+        return (OSErr)kOSTLSTimeBadArgs;
+    }
+
+    unix_seconds = 0;
+    if (gHasTrustedTime) {
+        unix_seconds = gTrustedUnixSeconds +
+                       (TickCount() - gTrustedTicks) / OSTLS_TICKS_PER_SECOND;
+    } else {
+        clock_err = local_clock_unix_seconds(&unix_seconds);
+        if (clock_err != (OSErr)kOSTLSTimeOK) {
+            *out_days = 0;
+            *out_seconds = 0;
+            return clock_err;
+        }
+    }
+
+    /* Reject clocks before 2000-01-01 or before the build floor --
+     * post-floor certs would look not-yet-valid against such a "now"
+     * and the resulting validation cascade hides the root cause. */
+    if (unix_seconds < OSTLS_UNIX_TO_2000_OFFSET ||
+        unix_seconds < OSTLS_CLOCK_FLOOR_UNIX) {
         *out_days = 0;
         *out_seconds = 0;
         return (OSErr)kOSTLSTimeClockBefore2000;

@@ -81,4 +81,28 @@ enum {
  */
 OSErr OSTLS_GetBearSSLTime(UInt32 *out_days, UInt32 *out_seconds);
 
+/*
+ * Lotus Navigator clock gate.
+ *
+ * OSTLS_CLOCK_FLOOR_UNIX: any "now" earlier than this (Unix seconds, GMT)
+ * is treated as a wrong clock and reported as kOSTLSTimeClockBefore2000.
+ * A browser built after this date can never legitimately run before it,
+ * so a PRAM clock that merely reads "after 2000" no longer slips through
+ * and surfaces later as phantom certificate-expiry errors.
+ * Default 2026-01-01T00:00:00Z; override from the prefix header.
+ */
+#ifndef OSTLS_CLOCK_FLOOR_UNIX
+#define OSTLS_CLOCK_FLOOR_UNIX  1767225600UL
+#endif
+
+/*
+ * Trusted time override (e.g. from an SNTP exchange). After a call,
+ * OSTLS_GetBearSSLTime() derives "now" from unix_seconds plus the
+ * TickCount() elapsed since the call, ignoring the local clock.
+ * TickCount wraps after ~2.2 years of uptime; callers re-sync per launch.
+ */
+void OSTLS_SetTrustedUnixTime(UInt32 unix_seconds);
+void OSTLS_ClearTrustedTime(void);
+int  OSTLS_HasTrustedTime(void);
+
 #endif /* OSTLS_TIME_H */

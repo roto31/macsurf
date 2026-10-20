@@ -2831,6 +2831,9 @@ int macos9_chrome_ask(const char *msg, const char *detail,
 	par.defaultButton = kAlertStdAlertOKButton;
 	par.cancelButton = kAlertStdAlertCancelButton;
 	par.position = kWindowDefaultPosition;
+	/* The proxy consent question opens on its own once the proxy answers,
+	 * so it has to be heard as well as seen. */
+	SysBeep(30);
 	StandardAlert(kAlertNoteAlert, p, d, &par, &item);
 	return item == kAlertStdAlertOKButton;
 }

@@ -44,6 +44,8 @@ hardware; no binary has been published.
   re-issued without the proxy (direct for http, macTLS for https) and that host skips WebOne for
   the rest of the session. A single cookie (apple.com's `geo`) passes intact. Requests with a body
   never use WebOne, for http as well as https.
+- The proxy consent dialog plays the system alert sound, since it opens on its own once the
+  proxy answers.
 - View menu: Use Proxy When Available, Use Proxy for Secure Sites, Set Proxy Server…, and a
   status line (none / checking / WebOne or Squid address / not answering).
 - `PERFACC` log line gains `connect=` (time the http fetcher spent blocked in Open Transport

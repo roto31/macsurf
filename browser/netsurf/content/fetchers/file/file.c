@@ -51,7 +51,7 @@
 #include "utils/messages.h"
 #include "utils/utils.h"
 #include "utils/log.h"
-#include "utils/time.h"
+#include "utils/ns_time.h"
 #include "utils/ring.h"
 #include "utils/file.h"
 #include "netsurf/fetch.h"
@@ -160,13 +160,15 @@ fetch_file_setup(struct fetch *fetchh,
 
 	/* Scan request headers looking for If-None-Match */
 	for (i = 0; headers[i] != NULL; i++) {
+		const char *d;
+
 		if (strncasecmp(headers[i], "If-None-Match:",
 				SLEN("If-None-Match:")) != 0) {
 			continue;
 		}
 
 		/* If-None-Match: "12345678" */
-		const char *d; d = headers[i] + SLEN(\"If-None-Match:\");
+		d = headers[i] + SLEN("If-None-Match:");
 
 		/* Scan to first digit, if any */
 		while (*d != '\0' && (*d < '0' || '9' < *d))

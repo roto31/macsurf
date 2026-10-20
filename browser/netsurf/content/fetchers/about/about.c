@@ -49,7 +49,7 @@
 #include "about.h"
 #include "blank.h"
 #include "certificate.h"
-#include "config.h"
+#include "content/fetchers/about/config.h"
 #include "chart.h"
 #include "choices.h"
 #include "imagecache.h"

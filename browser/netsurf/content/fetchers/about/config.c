@@ -30,7 +30,7 @@
 #include "utils/nsoption.h"
 
 #include "private.h"
-#include "config.h"
+#include "content/fetchers/about/config.h"
 
 /**
  * Handler to generate about scheme config page

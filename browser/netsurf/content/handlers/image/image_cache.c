@@ -354,7 +354,7 @@ struct bitmap *image_cache_get_bitmap(const struct content *c)
 
 	if (centry->bitmap == NULL) {
 		if (centry->convert != NULL) {
-			centry->bitmap = centry->convert(centry->content);
+			centry->bitmap = (*centry->convert)(centry->content);
 		}
 
 		if (centry->bitmap != NULL) {
@@ -548,7 +548,7 @@ nserror image_cache_add(struct content *content,
 		/* no bitmap, check to see if we should speculatively convert */
 		if ((centry->convert != NULL) &&
 		    (image_cache_speculate(content) == true)) {
-			centry->bitmap = centry->convert(centry->content);
+			centry->bitmap = (*centry->convert)(centry->content);
 
 			if (centry->bitmap != NULL) {
 				image_cache_stats_bitmap_add(centry);
@@ -812,7 +812,7 @@ bool image_cache_redraw(struct content *c,
 
 	if (centry->bitmap == NULL) {
 		if (centry->convert != NULL) {
-			centry->bitmap = centry->convert(centry->content);
+			centry->bitmap = (*centry->convert)(centry->content);
 		}
 
 		if (centry->bitmap != NULL) {

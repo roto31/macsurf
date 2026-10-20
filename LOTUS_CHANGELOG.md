@@ -26,6 +26,37 @@ hardware; no binary has been published.
 - TLS clock gate: certificate validation refuses system clocks earlier than 2026-01-01
   (`OSTLS_CLOCK_FLOOR_UNIX`) and accepts a trusted time source through
   `OSTLS_SetTrustedUnixTime`. See [`ostls_time.h`](macTLS/os9/ostls_time.h).
+- LAN proxy support that never gets in the way. The browser probes a configured proxy (View >
+  Set Proxy Server…, or the HTTP proxy in Internet Config) in the background with a 1.5-second
+  non-blocking connect and a `HEAD /`. Plain-http pages go through it only while it answers; a
+  failed proxy connect retries the request direct and re-checks the proxy after a minute. Only
+  private IPv4 addresses (10/8, 172.16/12, 192.168/16, 169.254/16, 127/8) are accepted, and LAN,
+  `localhost`, and `http_proxy_noproxy` destinations always go direct. See
+  [`macos9_proxy.h`](browser/netsurf/frontends/macos9/macos9_proxy.h).
+- Secure sites through a WebOne proxy, with consent. When the proxy identifies as WebOne, the
+  browser asks once per proxy address before sending https GETs through it (the proxy does the
+  TLS handshake instead of this Mac). Answer is stored in the `http_proxy_https_consent` option and
+  can be changed under View > Use Proxy for Secure Sites. Requests with a body, Facebook hosts,
+  and any request the proxy cannot take stay on macTLS end-to-end.
+- View menu: Use Proxy When Available, Use Proxy for Secure Sites, Set Proxy Server…, and a
+  status line (none / checking / WebOne or Squid address / not answering).
+- `PERFACC` log line gains `connect=` (time the http fetcher spent blocked in Open Transport
+  connect; not part of `total=`) and `via=direct|proxy|mixed`.
+
+### Changed
+
+- `http_proxy` now defaults to on. With no proxy address configured it does nothing.
+
+### Fixed
+
+- `misc.c`'s Internet Config calls compiled without prototypes: `macos9.h` suppresses
+  `InternetConfig.h` for Carbon.h, so the include was a no-op. Declarations now come from
+  [`macos9_ic.h`](browser/netsurf/frontends/macos9/macos9_ic.h).
+- The http fetcher's request-size guard ignored the caller headers and Sec-Fetch/Origin headers
+  (their lengths were never assigned), so a large cookie plus large XHR headers could overrun the
+  8 KB request buffer.
+- An https URL that reached the http fetcher by mistake was treated as an open connection instead
+  of failing.
 
 ### Security
 

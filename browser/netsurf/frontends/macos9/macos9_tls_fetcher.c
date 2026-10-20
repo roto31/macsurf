@@ -309,6 +309,29 @@ static int host_is_fb_asset(const char *host);
 static int host_is_fb_dynamic(const char *host);
 static int macos9_cache_response_persistable(const struct macos9_https_ctx *c);
 
+/* Secure GETs carried by the LAN proxy live in the http fetcher's slots
+ * (macos9_http_fetcher.c). */
+extern void *macos9_http_setup_via_proxy(struct fetch *p, struct nsurl *u,
+	const char **h);
+extern int  macos9_http_owns(void *ctx);
+extern bool macos9_http_ops_start(void *ctx);
+extern void macos9_http_ops_abort(void *ctx);
+extern void macos9_http_ops_free(void *ctx);
+
+static int url_host_is_fb_dynamic(struct nsurl *u)
+{
+	lwc_string *host_lwc = nsurl_get_component(u, NSURL_HOST);
+	char host[256];
+	size_t host_n;
+	if (host_lwc == NULL) return 0;
+	host_n = lwc_string_length(host_lwc);
+	if (host_n >= sizeof host) host_n = sizeof host - 1;
+	memcpy(host, lwc_string_data(host_lwc), host_n);
+	host[host_n] = '\0';
+	lwc_string_unref(host_lwc);
+	return host_is_fb_dynamic(host);
+}
+
 /* ---------- auto-upgrade fallback (fixes249b) ----------
  * When the user types "example.com" with no scheme, window.c prepends
  * "https://" (fixes249) so modern HTTPS-default sites work. For retro
@@ -3719,6 +3742,15 @@ static void *macos9_https_setup(struct fetch *p, struct nsurl *u,
 
 	(void)o; (void)d; (void)pm;
 
+	/* With the user's consent, plain GETs go through a LAN WebOne proxy
+	 * (macos9_proxy.h) instead of a TLS handshake on this Mac. Facebook
+	 * stays end-to-end: its login flow depends on this fetcher's cache
+	 * exemptions. */
+	if (pu == NULL && pm == NULL && !url_host_is_fb_dynamic(u)) {
+		void *proxied = macos9_http_setup_via_proxy(p, u, h);
+		if (proxied != NULL) return proxied;
+	}
+
 	for (i = 0; i < MAX_HTTPS_F; i++) {
 		if (https_slots[i].state == HS_IDLE) { slot = i; break; }
 	}
@@ -3950,6 +3982,7 @@ static void *macos9_https_setup(struct fetch *p, struct nsurl *u,
 static bool macos9_https_start(void *ctx)
 {
 	struct macos9_https_ctx *c = (struct macos9_https_ctx *)ctx;
+	if (macos9_http_owns(ctx)) return macos9_http_ops_start(ctx);
 	if (c) {
 		c->started = 1;   /* fixes232a - unblocks HS_QUEUED in hctx_poll */
 		if (c->state == HS_QUEUED) {
@@ -3962,12 +3995,14 @@ static bool macos9_https_start(void *ctx)
 static void macos9_https_abort(void *ctx)
 {
 	struct macos9_https_ctx *c = (struct macos9_https_ctx *)ctx;
+	if (macos9_http_owns(ctx)) { macos9_http_ops_abort(ctx); return; }
 	if (c) c->aborted = 1;
 }
 
 static void macos9_https_free(void *ctx)
 {
 	struct macos9_https_ctx *c = (struct macos9_https_ctx *)ctx;
+	if (macos9_http_owns(ctx)) { macos9_http_ops_free(ctx); return; }
 	if (!c) return;
 	if (c->state != HS_IDLE) hctx_clear(c);
 }

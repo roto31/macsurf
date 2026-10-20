@@ -67,6 +67,8 @@ void macos9_prefs_apply_defaults(void)
 	nsoption_set_bool(do_not_track, false);
 
 	/* Network / Advanced defaults */
+	/* Use a configured LAN proxy when it answers; direct otherwise. */
+	nsoption_set_bool(http_proxy, true);
 	nsoption_set_int(max_fetchers, 128);
 	nsoption_set_int(max_fetchers_per_host, 16);
 	nsoption_set_int(memory_cache_size, 32 * 1024 * 1024);

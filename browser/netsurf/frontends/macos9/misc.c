@@ -17,9 +17,7 @@
 #include "macos9.h"
 #include "macsurf_debug_log.h"
 
-#ifdef __MWERKS__
-#include <InternetConfig.h>
-#endif
+#include "macos9_ic.h"
 
 static void
 macos9_quit(void)

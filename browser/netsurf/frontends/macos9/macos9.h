@@ -277,6 +277,11 @@ extern bool macos9_quitting;
 #define ITEM_VIEW_ZOOM_OUT  6
 #define ITEM_VIEW_ZOOM_100  7
 #define ITEM_VIEW_DOWNLOADS 9
+/* Proxy items (macos9_proxy_mac.c); item 10 is a separator. */
+#define ITEM_VIEW_PROXY_USE    11
+#define ITEM_VIEW_PROXY_SECURE 12
+#define ITEM_VIEW_PROXY_SET    13
+#define ITEM_VIEW_PROXY_STATUS 14
 
 /* Bookmarks menu items. fixes700 (#50): 1=Add, 2=Manage Bookmarks (opens
  * the manager window), 3=separator, 4+=bookmarks. */
@@ -328,6 +333,10 @@ void macos9_history_window_show(struct gui_window *g);
 /* fixes706 - Clear Cache menu handler (wipes disk cache + dead-host state). */
 void macos9_cache_clear_ui(void);
 int  macos9_chrome_confirm_delete(const char *msg);
+int  macos9_chrome_ask(const char *msg, const char *detail,
+	const char *yes_label, const char *no_label);
+int  macos9_chrome_prompt_line(const char *title, const char *initial,
+	char *out, int outcap);
 
 /* fixes645 (#199) - modeless download-manager window (macos9_download.c),
  * routed from the main event loop. */

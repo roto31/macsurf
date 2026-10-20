@@ -2811,6 +2811,36 @@ int macos9_chrome_confirm_delete(const char *msg)
 	return item == kAlertStdAlertOKButton;
 }
 
+/* Note alert with caller-labelled buttons. Returns 1 for yes_label. */
+int macos9_chrome_ask(const char *msg, const char *detail,
+	const char *yes_label, const char *no_label)
+{
+	Str255 p, d, yes, no;
+	SInt16 item = 0;
+	AlertStdAlertParamRec par;
+	c_to_pstring(msg, p);
+	c_to_pstring(detail, d);
+	c_to_pstring(yes_label, yes);
+	c_to_pstring(no_label, no);
+	par.movable = false;
+	par.helpButton = false;
+	par.filterProc = NULL;
+	par.defaultText = yes;
+	par.cancelText = no;
+	par.otherText = NULL;
+	par.defaultButton = kAlertStdAlertOKButton;
+	par.cancelButton = kAlertStdAlertCancelButton;
+	par.position = kWindowDefaultPosition;
+	StandardAlert(kAlertNoteAlert, p, d, &par, &item);
+	return item == kAlertStdAlertOKButton;
+}
+
+int macos9_chrome_prompt_line(const char *title, const char *initial,
+	char *out, int outcap)
+{
+	return chrome_prompt_text(title, initial, out, outcap);
+}
+
 /* One rendered line in the bookmark tree. */
 struct bw_row {
 	short bidx;       /* index into macsurf_bookmarks[] */
@@ -3768,6 +3798,12 @@ void macos9_bookmark_window_show(struct gui_window *g)
 #else  /* !__MACOS9__ */
 void macos9_bookmark_window_show(struct gui_window *g) { (void)g; }
 int  macos9_chrome_confirm_delete(const char *msg) { (void)msg; return 1; }
+int  macos9_chrome_ask(const char *msg, const char *detail,
+	const char *yes_label, const char *no_label)
+{ (void)msg; (void)detail; (void)yes_label; (void)no_label; return 0; }
+int  macos9_chrome_prompt_line(const char *title, const char *initial,
+	char *out, int outcap)
+{ (void)title; (void)initial; (void)out; (void)outcap; return 0; }
 #endif
 
 /* Legacy "Show Bookmarks" alert - retained for ABI but no longer menu-

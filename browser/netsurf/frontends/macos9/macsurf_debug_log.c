@@ -1304,6 +1304,23 @@ static long g_accum_paint_us   = 0;	/* browser_window_redraw, summed    */
 static long g_accum_js_us      = 0;	/* js_exec, summed                  */
 static long g_accum_reflows    = 0;	/* full html_reformat passes        */
 static long g_perf_ttfb_us     = -1;	/* first fetch-finished = TTFB     */
+static long g_accum_connect_us = 0;	/* blocking OT connect, wall-clock  */
+static long g_n_route_proxy    = 0;	/* http-fetcher opens via the proxy */
+static long g_n_route_direct   = 0;	/* http-fetcher opens direct        */
+
+static void macsurf_profile_clear_route(void)
+{
+	g_accum_connect_us = 0;
+	g_n_route_proxy = 0;
+	g_n_route_direct = 0;
+}
+
+static const char *macsurf_profile_route_label(void)
+{
+	if (g_n_route_proxy > 0 && g_n_route_direct > 0) return "mixed";
+	if (g_n_route_proxy > 0) return "proxy";
+	return "direct";
+}
 
 /* fixes1070  -  CALL COUNTS for every phase, taken for free inside the existing
  * accum_* adders (no new call sites, no new brackets).
@@ -1360,6 +1377,7 @@ macsurf_profile_reset(void)
 	g_accum_js_us      = 0;
 	g_accum_reflows    = 0;
 	g_perf_ttfb_us     = -1;
+	macsurf_profile_clear_route();
 	/* fixes1070  -  the call counts reset with the times they divide. */
 	g_n_tls = 0; g_n_net = 0; g_n_parse = 0; g_n_cascade = 0;
 	g_n_layout = 0; g_n_paint = 0; g_n_js = 0;
@@ -1445,6 +1463,12 @@ void macsurf_profile_accum_layout(long us)  { g_n_layout++;  if (us > 0) g_accum
 void macsurf_profile_accum_paint(long us)   { g_n_paint++;   if (us > 0) g_accum_paint_us   += us; }
 void macsurf_profile_accum_js(long us)      { g_n_js++;      if (us > 0) g_accum_js_us      += us; }
 void macsurf_profile_note_reflow(void)      { g_accum_reflows++; }
+void macsurf_profile_accum_connect(long us) { if (us > 0) g_accum_connect_us += us; }
+void macsurf_profile_note_route(int via_proxy)
+{
+	if (via_proxy) g_n_route_proxy++;
+	else g_n_route_direct++;
+}
 
 /* fixes640a (review blocker): inline <script> executes SYNCHRONOUSLY inside
  * dom_hubbub_parser_parse_chunk (parser script callback -> js_exec -> JS_Eval),
@@ -1552,11 +1576,14 @@ macsurf_profile_emit_phases(const char *url)
 	 * it. The prefix does not depend on any build flag. */
 	macsurf_debug_log_writef(
 		"LIFE PERFACC tls=%ldus net=%ldus ttfb=%ldus parse=%ldus cascade=%ldus "
-		"layout=%ldus paint=%ldus js=%ldus reflows=%ld total=%ldus",
+		"layout=%ldus paint=%ldus js=%ldus reflows=%ld total=%ldus "
+		"connect=%ldus via=%s",
 		g_accum_tls_us, g_accum_net_us,
 		(g_perf_ttfb_us < 0) ? -1L : g_perf_ttfb_us,
 		g_accum_parse_us, g_accum_cascade_us, g_accum_layout_us,
-		g_accum_paint_us, g_accum_js_us, g_accum_reflows, total);
+		g_accum_paint_us, g_accum_js_us, g_accum_reflows, total,
+		g_accum_connect_us, macsurf_profile_route_label());
+	macsurf_profile_clear_route();
 	/* fixes640b  -  zero the accumulators AFTER emitting so the next load
 	 * starts clean regardless of navigation type (URL-bar, link click,
 	 * back/forward). This replaces the mid-load set_url reset that was

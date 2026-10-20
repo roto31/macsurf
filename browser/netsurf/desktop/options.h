@@ -60,6 +60,10 @@ NSOPTION_STRING(http_proxy_auth_pass, NULL)
 /** Proxy omission list */
 NSOPTION_STRING(http_proxy_noproxy, "localhost")
 
+/** Lotus Navigator: secure-site proxy consent, "<host:port>" for yes,
+ * "!<host:port>" for no (frontends/macos9/macos9_proxy.h). */
+NSOPTION_STRING(http_proxy_https_consent, NULL)
+
 /** Default treeview font size (unit: 0.1pt) */
 NSOPTION_INTEGER(treeview_font_size, 110)
 

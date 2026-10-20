@@ -120,6 +120,12 @@ void macsurf_profile_accum_layout(long us);
 void macsurf_profile_accum_paint(long us);
 void macsurf_profile_accum_js(long us);
 void macsurf_profile_note_reflow(void);   /* +1 per full html_reformat pass */
+/* Blocking OT open+bind+connect time in the http fetcher. Wall-clock, so it
+ * is reported in PERFACC as connect= but kept out of total= (it is part of
+ * PERFWALL's unacct). via= says whether fetches went direct, through the
+ * proxy, or mixed. */
+void macsurf_profile_accum_connect(long us);
+void macsurf_profile_note_route(int via_proxy);
 long macsurf_profile_get_js_us(void);     /* for parse to subtract nested inline JS */
 
 /* fixes1070  -  emit_phases now writes THREE lines, not one:

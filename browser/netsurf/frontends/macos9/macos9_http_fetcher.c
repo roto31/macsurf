@@ -12,6 +12,8 @@
 #include "macos9_blocklist.h"	/* fixes957 (#285) - tracker/ad blocklist (http side) */
 #include "macsurf_debug.h"
 #include "macsurf_osver.h"	/* fixes936 (OS X tier 1) - macsurf_os_is_osx() */
+#include "macos9_proxy.h"
+#include "macsurf_debug_log.h"
 #ifdef __MACOS9__
 #include <Files.h>
 #include <Script.h>
@@ -40,6 +42,7 @@ extern int macos9_https_host_is_dead(const char *host, int port);
  * and do NOT scheme-fall-back to it, so the cdn.jsdelivr.net emoji storm cannot
  * be relaunched from the http side. */
 extern int macos9_https_url_is_terminal(const char *url);
+extern double macos9_micros(void);
 #endif
 
 /* Persistent on-disk body cache: extracted to macos9_disk_cache.[ch]
@@ -58,6 +61,8 @@ extern int macos9_https_url_is_terminal(const char *url);
  * NetSurf may have up to 16 fetches per host in flight after fixes91's
  * max_fetchers_per_host bump; 16 here matches. */
 #define POOL_SIZE 16
+/* No-progress limit for proxied fetches (15 s at 60 Hz). */
+#define PROXY_NO_PROGRESS_TICKS 900UL
 
 /* fixes91 - new state MFS_QUEUED:
  * NetSurf core's fetch_dispatch_jobs() gates on max_fetchers / per-host
@@ -180,8 +185,28 @@ struct macos9_fetch_ctx {
 	 * fixes846 (#167 S3): 512 -> 2048, see macos9_tls_fetcher.c's
 	 * caller_hdrs comment (XHR/GraphQL header sets overflow 512). */
 	char caller_hdrs[2048];
+	/* Lotus proxy routing (macos9_proxy.h).
+	 *   is_https             : secure URL handed over by the https fetcher;
+	 *                          only ever sent through the proxy.
+	 *   via_proxy            : this attempt talks to the proxy using an
+	 *                          absolute-form request line.
+	 *   no_proxy             : the proxy attempt failed; retry direct.
+	 *   proxy_connect_failed : the proxy attempt failed before the request
+	 *                          was on the wire, so it is safe to retry.
+	 *   retry_open / skip_pool: a pooled proxy socket was stale; retry
+	 *                          once on a fresh connection. */
+	int is_https;
+	int via_proxy;
+	int no_proxy;
+	int proxy_connect_failed;
+	int retry_open;
+	int skip_pool;
 };
 static struct macos9_fetch_ctx f_slots[MAX_F];
+
+/* A secure URL that just bounced off the proxy back to macTLS. The https
+ * fetcher's next setup for this exact URL must not hand it straight back. */
+static char g_proxy_bounced_url[1024];
 
 /* fixes936 (OS X tier 1) - one-shot latch for the "RECON OT http done" line
  * emitted from the MFS_DONE arm of macos9_http_poll. */
@@ -369,6 +394,12 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 	size_t scheme_len;
 	int port_num;
 	EndpointRef pooled;
+	char route_host[256];
+	size_t route_len;
+	int is_https_url;
+	int hdr_sent = 0;
+	int proxy_fault = 0;
+	double connect_t0;
 
 	scheme_lwc = NULL;
 	host_lwc = NULL;
@@ -435,17 +466,35 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 	host_str = lwc_string_data(host_lwc);
 	host_len = lwc_string_length(host_lwc);
 
-	/* This fetcher serves http:// directly over Open Transport only.
-	 * HTTPS is handled natively by macTLS (macos9_tls_fetcher.c); if an
-	 * https URL ever reaches this fetcher it's a routing bug, so log
-	 * loudly and refuse. (fixes692 #153: the retired-proxy branch that
-	 * used to build a PROXY target here is gone - MacSurf has been
-	 * proxy-free since native macTLS landed.) */
-	if (scheme_len == 5 && strncmp(scheme_str, "https", 5) == 0) {
+	/* HTTPS is handled natively by macTLS (macos9_tls_fetcher.c). The
+	 * only https URLs this fetcher accepts are the ones the https fetcher
+	 * delegated (is_https) for the user-approved proxy; anything else is
+	 * a routing bug, so log loudly and refuse. */
+	is_https_url = (scheme_len == 5 && strncmp(scheme_str, "https", 5) == 0);
+	if (is_https_url && !c->is_https) {
 		MS_LOG("http_fetcher: REFUSING https (should route to macTLS)");
 		if (scheme_lwc) lwc_string_unref(scheme_lwc);
 		if (host_lwc) lwc_string_unref(host_lwc);
 		return -1;
+	}
+
+	route_len = host_len;
+	if (route_len > sizeof(route_host) - 1) route_len = sizeof(route_host) - 1;
+	memcpy(route_host, host_str, route_len);
+	route_host[route_len] = '\0';
+	c->via_proxy = 0;
+	if (!c->no_proxy) {
+		c->via_proxy = macos9_proxy_route(route_host, c->is_https,
+			c->post_body != NULL, nsoption_charp(http_proxy_noproxy));
+	}
+	macsurf_profile_note_route(c->via_proxy);
+	if (c->is_https && !c->via_proxy) {
+		macsurf_debug_log_writef(
+			"mfs_open: proxy no longer available for https host=%s",
+			route_host);
+		c->err = "proxy unavailable";
+		c->proxy_connect_failed = 1;
+		goto fail_unref;
 	}
 
 	port_lwc = nsurl_get_component(c->url, NSURL_PORT);
@@ -455,16 +504,21 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 	} else {
 		port_num = 80;
 	}
-	if (host_len + 8 >= sizeof(target)) {
-		MS_LOG("mfs_open: host too long");
-		goto fail_unref;
+	if (c->via_proxy) {
+		strcpy(target, macos9_proxy_target());
+	} else {
+		if (host_len + 8 >= sizeof(target)) {
+			MS_LOG("mfs_open: host too long");
+			goto fail_unref;
+		}
+		sprintf(target, "%.*s:%d", (int)host_len, host_str, port_num);
 	}
-	sprintf(target, "%.*s:%d", (int)host_len, host_str, port_num);
 	strncpy(c->pool_key, target, POOL_KEY_LEN - 1);
 	c->pool_key[POOL_KEY_LEN - 1] = '\0';
 
 	MS_LOG("mfs_open: enter");
-	pooled = ep_pool_take(c->pool_key);
+	connect_t0 = macos9_micros();
+	pooled = c->skip_pool ? NULL : ep_pool_take(c->pool_key);
 	if (pooled != NULL) {
 		c->ep = pooled;
 		OTSetSynchronous(c->ep);
@@ -496,9 +550,12 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 		if (OTConnect(c->ep, &call, NULL) != noErr) {
 			macsurf_debug_log_writef(
 				"mfs_open: OTConnect FAIL target=%s", target);
+			proxy_fault = c->via_proxy;
 			goto fail_unref;
 		}
 	}
+	/* Synchronous: this whole span blocks the event loop. */
+	macsurf_profile_accum_connect((long)(macos9_micros() - connect_t0));
 
 	/* Build the request line in origin-form (GET /foo HTTP/1.1); Host:
 	 * holds the origin hostname. (The retired proxy used absolute-form
@@ -521,6 +578,10 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 		 * field, so retain the same headroom in both cases. */
 		size_t TEMPLATE_LEN = (c->post_body != NULL) ? 223 : 149;
 		const char *method = (c->post_body != NULL) ? "POST" : "GET";
+		/* The proxy would otherwise be free to gzip, and this fetcher
+		 * has no inflater. */
+		const char *proxy_hdrs = c->via_proxy ?
+			"Accept-Encoding: identity\r\n" : "";
 		/* fixes721 - Content-Type: multipart (with boundary) if a file was
 		 * posted, else the urlencoded default. Built into a buffer since the
 		 * multipart boundary is dynamic. */
@@ -545,6 +606,7 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 		/* fixes721 - POST Content-Type: multipart (with boundary) for a
 		 * file upload, else the urlencoded default. Assigned HERE, after
 		 * all declarations, so CW8 C89 (decls-before-statements) is happy. */
+		TEMPLATE_LEN += strlen(proxy_hdrs);
 		if (c->post_body == NULL) {
 			post_extra_hdrs = "";
 		} else if (c->post_ctype[0] != '\0') {
@@ -588,7 +650,9 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 		 * already supplied its own Sec-Fetch/Origin wins. */
 		verifiable = fetch_get_verifiable(c->parent);
 		macos9_build_sec_fetch(synth, sizeof synth, verifiable,
-		(c->post_body != NULL), "http", host_z);
+		(c->post_body != NULL), c->is_https ? "https" : "http", host_z);
+		xh_var = strlen(c->caller_hdrs);
+		sf_var = strlen(synth);
 		/* fixes368a (#167) - one request-summary line per fetch: host, the
 		 * chosen UA, and Cookie: header size (bytes only, never values).
 		 * Mirrors the HTTPS fetcher so the troubleshooting trace reads the
@@ -644,6 +708,21 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 					pb_used = p_len + 1 + q_len;
 				}
 			}
+			/* A proxy needs the absolute-form request line. The
+			 * fragment never goes on the wire. */
+			if (c->via_proxy) {
+				const char *abs_url = nsurl_access(c->url);
+				const char *frag = strchr(abs_url, '#');
+				size_t abs_len = (frag != NULL) ?
+					(size_t)(frag - abs_url) : strlen(abs_url);
+				if (abs_len >= sizeof(path_buf)) {
+					c->err = "URL too long";
+					goto fail_unref;
+				}
+				memcpy(path_buf, abs_url, abs_len);
+				path_buf[abs_len] = '\0';
+				pb_used = abs_len;
+			}
 			if (TEMPLATE_LEN + pb_used + host_len + ua_var + ck_var
 			    + xh_var + sf_var + 1 > sizeof(req)) {   /* fixes835 */
 				macsurf_debug_log_writef(
@@ -655,8 +734,9 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 				c->err = "URL too long";
 				goto fail_unref;
 			}
-			macsurf_debug_log_writef("mfs_open: %s (direct) %s %s",
-					method, target, path_buf);
+			macsurf_debug_log_writef("mfs_open: %s (%s) %s %s",
+					method, c->via_proxy ? "proxy" : "direct",
+					target, path_buf);
 			/* fixes98: direct requests now use keep-alive - the chunked
 			 * decoder in mfs_poll_one / process_chunked_bytes frames
 			 * Transfer-Encoding: chunked responses correctly so we don't
@@ -672,12 +752,13 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 					"%s"              /* cookie_hdr  */
 					"%s"              /* caller_hdrs (fixes835) */
 					"%s"              /* synth       (fixes835) */
+					"%s"              /* proxy_hdrs  */
 					"%s"              /* post_extra_hdrs */
 					"Content-Length: %ld\r\n"
 					"Connection: close\r\n\r\n",
 					path_buf, (int)host_len, host_str,
 					ua, macos9_accept_for_path(path_buf), cookie_hdr, c->caller_hdrs, synth,
-					post_extra_hdrs, c->post_body_len);
+					proxy_hdrs, post_extra_hdrs, c->post_body_len);
 			} else {
 				sprintf(req,
 					"GET %s HTTP/1.1\r\n"
@@ -687,9 +768,11 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 					"%s"              /* cookie_hdr  */
 					"%s"              /* caller_hdrs (fixes835) */
 					"%s"              /* synth       (fixes835) */
+					"%s"              /* proxy_hdrs  */
 					"Connection: keep-alive\r\n\r\n",
 					path_buf, (int)host_len, host_str,
-					ua, macos9_accept_for_path(path_buf), cookie_hdr, c->caller_hdrs, synth);
+					ua, macos9_accept_for_path(path_buf), cookie_hdr, c->caller_hdrs, synth,
+					proxy_hdrs);
 			}
 		}
 	}
@@ -698,8 +781,16 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 	if (r < 0) {
 		macsurf_debug_log_writef("mfs_open: OTSnd hdr err=%ld",
 				(long)r);
+		if (c->via_proxy && pooled != NULL && !c->skip_pool) {
+			/* Idle proxy socket closed under us: not a proxy fault. */
+			c->skip_pool = 1;
+			c->retry_open = 1;
+		} else {
+			proxy_fault = c->via_proxy;
+		}
 		goto fail_unref;
 	}
+	hdr_sent = 1;
 	/* fixes312 (#144) - send POST body after headers. OTSnd is in
 	 * blocking mode here (OTSetNonBlocking happens below), so this is
 	 * a clean single-shot send for typical form-size payloads. Returns
@@ -762,6 +853,15 @@ fail_unref:
 		c->ep = NULL;
 	}
 	c->keep_alive_ok = 0;
+	/* Nothing reached the origin yet, so another route is safe. */
+	if (c->via_proxy && !hdr_sent && !c->retry_open) {
+		c->proxy_connect_failed = 1;
+		if (proxy_fault) {
+			macos9_proxy_note_failure((unsigned long)TickCount());
+			macsurf_debug_log_writef("LIFE proxy %s failed; direct",
+				macos9_proxy_target());
+		}
+	}
 	if (scheme_lwc != NULL) lwc_string_unref(scheme_lwc);
 	if (host_lwc != NULL) lwc_string_unref(host_lwc);
 	if (port_lwc != NULL) lwc_string_unref(port_lwc);
@@ -1133,6 +1233,26 @@ static void mfs_parse_headers(struct macos9_fetch_ctx *c) {
 	free(c->h_buf); c->h_buf=NULL;
 }
 
+/* After a failed mfs_open: returns 1 if the slot should stay in MFS_INIT
+ * and try again (fresh proxy socket, or direct after a proxy failure).
+ * Secure URLs never go direct from here; macos9_http_poll bounces them
+ * back to macTLS instead. */
+static int mfs_retry_after_proxy_failure(struct macos9_fetch_ctx *c)
+{
+	if (c->retry_open) {
+		c->retry_open = 0;
+	} else if (c->proxy_connect_failed && !c->is_https) {
+		c->proxy_connect_failed = 0;
+		c->no_proxy = 1;
+	} else {
+		return 0;
+	}
+	c->err = NULL;
+	c->via_proxy = 0;
+	c->keep_alive_ok = (c->post_body == NULL);
+	return 1;
+}
+
 static void mfs_poll_one(struct macos9_fetch_ctx *c) {
 #ifdef __MACOS9__
 	/* fixes92 - static so we can afford a 32 KB buffer without stack
@@ -1195,7 +1315,11 @@ static void mfs_poll_one(struct macos9_fetch_ctx *c) {
 			}
 		}
 	}
-	if(c->state==MFS_INIT) { if(mfs_open(c)) c->state=MFS_HEADERS; else c->state=MFS_FAIL; return; }
+	if(c->state==MFS_INIT) {
+		if (mfs_open(c) > 0) c->state = MFS_HEADERS;
+		else if (!mfs_retry_after_proxy_failure(c)) c->state = MFS_FAIL;
+		return;
+	}
 	/* fixes172 - cache-hit fast path. mfs_open set cache_hit=1 and
 	 * populated the body buffer; we deliver headers, the body, and
 	 * finished, then transition straight to MFS_DONE without ever
@@ -1350,8 +1474,11 @@ static void macos9_http_poll(lwc_string *s) {
 		 * Was 900 ticks (15s); now 240 ticks (4s). HTTP traffic is
 		 * almost entirely retired by HTTPS but consistency keeps the
 		 * fail latency the same for any legacy http:// fetch. */
+		/* Through a proxy the first byte also waits on the proxy's own
+		 * fetch from the origin. */
 		if ((c->state == MFS_HEADERS || c->state == MFS_BODY) &&
-		    (now - c->progress_ticks) > 240) {
+		    (now - c->progress_ticks) >
+			(c->via_proxy ? PROXY_NO_PROGRESS_TICKS : 240UL)) {
 			macsurf_debug_log_writef(
 				"http: timeout slot=%d state=%d body=%ld",
 				i, (int)c->state, c->body_bytes);
@@ -1370,6 +1497,35 @@ static void macos9_http_poll(lwc_string *s) {
 			 * can't bounce back. */
 			extern void macsurf_scheme_mark_http_failed(const char *key);
 			extern int  macsurf_scheme_was_https_tried(const char *key);
+			/* A secure URL the proxy could not take goes back to
+			 * macTLS: 307 to itself re-enters the https fetcher,
+			 * which skips the proxy for this URL once. */
+			if (c->is_https && c->proxy_connect_failed &&
+			    c->aborted == 0 && c->url != NULL) {
+				const char *u = nsurl_access(c->url);
+				if (strlen(u) < sizeof g_proxy_bounced_url) {
+					fetch_msg rm;
+					strcpy(g_proxy_bounced_url, u);
+					macsurf_debug_log_writef(
+						"http: proxy bounce -> macTLS %s", u);
+					(void)fetch_set_http_code(c->parent, 307);
+					rm.type = FETCH_REDIRECT;
+					rm.data.redirect = g_proxy_bounced_url;
+					c->state = MFS_NOTIFIED;
+					fetch_send_callback(&rm, c->parent);
+					fetch_remove_from_queues(c->parent);
+					fetch_free(c->parent);
+					continue;
+				}
+			}
+			if (c->via_proxy) {
+				fetch_msg m; m.type=FETCH_ERROR; m.data.error=c->err;
+				c->state=MFS_NOTIFIED; fetch_send_callback(&m,c->parent);
+				macsurf_debug_log_writef("http: proxy fail status=%d", c->status);
+				fetch_remove_from_queues(c->parent);
+				fetch_free(c->parent);
+				continue;
+			}
 			if (c->pool_key[0] != '\0') {
 				macsurf_scheme_mark_http_failed(c->pool_key);
 			}
@@ -1879,6 +2035,67 @@ static void macos9_http_free(void *ctx) {
 	c->post_body_len = 0;
 	c->state = MFS_IDLE;
 }
+
+/* --- Secure URLs carried by the proxy (see macos9_tls_fetcher.c) ---
+ * The https fetcher owns the scheme, so core sends every https start /
+ * abort / free to it; it forwards the ones that live in f_slots here. */
+int macos9_http_owns(void *ctx)
+{
+	int i;
+	for (i = 0; i < MAX_F; i++) {
+		if (ctx == (void *)&f_slots[i]) return 1;
+	}
+	return 0;
+}
+
+/* Returns an f_slots context when this GET should go through the proxy,
+ * NULL to let macTLS fetch it directly. */
+void *macos9_http_setup_via_proxy(struct fetch *p, struct nsurl *u,
+	const char **h)
+{
+	const char *url = nsurl_access(u);
+	lwc_string *host_lwc;
+	char host[256];
+	size_t host_n;
+	int routed;
+	struct macos9_fetch_ctx *c;
+
+	if (url == NULL || strlen(url) >= sizeof g_proxy_bounced_url) return NULL;
+	if (strcmp(url, g_proxy_bounced_url) == 0) {
+		g_proxy_bounced_url[0] = '\0';
+		return NULL;
+	}
+	host_lwc = nsurl_get_component(u, NSURL_HOST);
+	if (host_lwc == NULL) return NULL;
+	host_n = lwc_string_length(host_lwc);
+	if (host_n >= sizeof host) host_n = sizeof host - 1;
+	memcpy(host, lwc_string_data(host_lwc), host_n);
+	host[host_n] = '\0';
+	lwc_string_unref(host_lwc);
+	routed = macos9_proxy_route(host, 1, 0,
+		nsoption_charp(http_proxy_noproxy));
+	if (!routed) return NULL;
+	c = (struct macos9_fetch_ctx *)macos9_http_setup(p, u, false, false,
+		NULL, NULL, h);
+	if (c != NULL) c->is_https = 1;
+	return c;
+}
+
+/* Fetches currently on the wire (opening, awaiting headers, or reading). */
+int macos9_http_fetcher_active(void)
+{
+	int i, n = 0;
+	for (i = 0; i < MAX_F; i++) {
+		if (f_slots[i].state == MFS_INIT ||
+		    f_slots[i].state == MFS_HEADERS ||
+		    f_slots[i].state == MFS_BODY) n++;
+	}
+	return n;
+}
+
+bool macos9_http_ops_start(void *ctx) { return macos9_http_start(ctx); }
+void macos9_http_ops_abort(void *ctx) { macos9_http_abort(ctx); }
+void macos9_http_ops_free(void *ctx) { macos9_http_free(ctx); }
 
 nserror macos9_http_fetcher_register(void) {
 	struct fetcher_operation_table ops; lwc_string *sh, *ss;

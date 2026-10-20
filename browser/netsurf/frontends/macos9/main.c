@@ -1,4 +1,5 @@
 #include "macos9.h"
+#include "macos9_proxy_mac.h"
 #include <stdio.h>
 #include <string.h>
 #include "utils/log.h"
@@ -292,6 +293,14 @@ static void macos9_init_menus(void) {
 		AppendMenu(view_menu, "\pActual Size/0");         /* 7 */
 		AppendMenu(view_menu, "\p(-");                    /* 8 */
 		AppendMenu(view_menu, "\pDownloads\311/J");       /* 9 */
+		/* LAN proxy (macos9_proxy_mac.c). The status line's text is
+		 * set later with SetMenuItemText, which unlike AppendMenu does
+		 * not treat '(' as a metacharacter. */
+		AppendMenu(view_menu, "\p(-");                    /* 10 */
+		AppendMenu(view_menu, "\pUse Proxy When Available"); /* 11 */
+		AppendMenu(view_menu, "\pUse Proxy for Secure Sites"); /* 12 */
+		AppendMenu(view_menu, "\pSet Proxy Server\311");  /* 13 */
+		AppendMenu(view_menu, "\pProxy");                 /* 14 */
 		InsertMenu(view_menu, 0);
 	}
 
@@ -532,6 +541,11 @@ static void macos9_handle_menu(short menu_id, short item) {
 		}
 		break;
 	case MENU_VIEW:
+		/* Proxy items work with no browser window open. */
+		if (item >= ITEM_VIEW_PROXY_USE) {
+			macos9_proxy_mac_menu_command(item);
+			break;
+		}
 		front = FrontWindow();
 		gw = front ? macos9_find_window(front) : NULL;
 		if (!gw) break;
@@ -1587,6 +1601,7 @@ void macos9_poll(void) {
 		 * keeps queued jobs dispatching and per-scheme polls
 		 * running every loop iteration. */
 		{ macos9_op_depth++; fetch_pump(); macos9_op_depth--; }
+		macos9_proxy_mac_idle();
 		macos9_windows_te_idle(); macos9_windows_process_deferred();
 		/* fixes725 - nav-button hover highlight: track the pointer over the
 		 * front window's toolbar (cheap; only repaints on a hover change). */
@@ -2157,6 +2172,7 @@ int main(void) {
 	 * every option that differs from the compiled default, or a clean
 	 * "n=0" line if none do. */
 	macos9_prefs_log_deltas();
+	macos9_proxy_mac_init();
 #ifdef __MACOS9__
 	macsurf_debug_log_writef("DIAG pre-netsurf_init: free=%ld maxblk=%ld",
 		(long)FreeMem(), (long)MaxBlock());

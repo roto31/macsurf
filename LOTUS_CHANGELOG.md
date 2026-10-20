@@ -57,6 +57,11 @@ hardware; no binary has been published.
 
 ### Fixed
 
+- Clean CodeWarrior 8.3 builds (no cached object files): `file.c` and `resource.c` had a
+  mis-escaped `SLEN(\"If-None-Match:\")` and included the renamed `utils/time.h` (now
+  `utils/ns_time.h`); `about.c` and `about/config.c` include `content/fetchers/about/config.h`
+  by full path so another library's `config.h` is not picked up; `image_cache.c` calls
+  `(*centry->convert)(...)`, which MWCC 8.3 accepts.
 - `misc.c`'s Internet Config calls compiled without prototypes: `macos9.h` suppresses
   `InternetConfig.h` for Carbon.h, so the include was a no-op. Declarations now come from
   [`macos9_ic.h`](browser/netsurf/frontends/macos9/macos9_ic.h).

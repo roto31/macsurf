@@ -194,13 +194,18 @@ struct macos9_fetch_ctx {
 	 *   proxy_connect_failed : the proxy attempt failed before the request
 	 *                          was on the wire, so it is safe to retry.
 	 *   retry_open / skip_pool: a pooled proxy socket was stale; retry
-	 *                          once on a fresh connection. */
+	 *                          once on a fresh connection.
+	 *   proxy_mangles_cookies: the proxy this attempt used merges
+	 *                          Set-Cookie headers (WebOne); a response
+	 *                          that sets several cookies is fetched again
+	 *                          without it. */
 	int is_https;
 	int via_proxy;
 	int no_proxy;
 	int proxy_connect_failed;
 	int retry_open;
 	int skip_pool;
+	int proxy_mangles_cookies;
 };
 static struct macos9_fetch_ctx f_slots[MAX_F];
 
@@ -487,6 +492,8 @@ static int mfs_open(struct macos9_fetch_ctx *c) {
 		c->via_proxy = macos9_proxy_route(route_host, c->is_https,
 			c->post_body != NULL, nsoption_charp(http_proxy_noproxy));
 	}
+	c->proxy_mangles_cookies =
+		c->via_proxy && macos9_proxy_mangles_cookies();
 	macsurf_profile_note_route(c->via_proxy);
 	if (c->is_https && !c->via_proxy) {
 		macsurf_debug_log_writef(
@@ -976,6 +983,81 @@ process_chunked_bytes(struct macos9_fetch_ctx *c, const char *b, long len)
 	}
 }
 
+/* 1 if the header block [start, end) has a Set-Cookie line that holds
+ * several cookies run together. */
+static int mfs_headers_merged_cookie(const char *start, const char *end)
+{
+	const char *line = start;
+	const char *eol;
+	const char *v;
+	while (line < end) {
+		eol = strstr(line, "\r\n");
+		if (eol == NULL || eol > end) eol = end;
+		if (eol - line > 11 && strncasecmp(line, "Set-Cookie:", 11) == 0) {
+			v = line + 11;
+			while (v < eol && (*v == ' ' || *v == '\t')) v++;
+			if (macos9_proxy_set_cookie_merged(v, (long)(eol - v)))
+				return 1;
+		}
+		if (eol >= end) break;
+		line = eol + 2;
+	}
+	return 0;
+}
+
+/* Hand the URL back to core as a 307 to itself, so its next fetch is
+ * routed afresh (macTLS for a secure URL, direct for a plain one). The
+ * https fetcher skips the proxy once for g_proxy_bounced_url. Returns 0,
+ * leaving the slot untouched, if the URL does not fit. */
+static int mfs_redirect_to_self(struct macos9_fetch_ctx *c, const char *why)
+{
+	fetch_msg rm;
+	struct fetch *parent_save;
+	const char *u;
+	if (c->url == NULL) return 0;
+	u = nsurl_access(c->url);
+	if (strlen(u) >= sizeof g_proxy_bounced_url) return 0;
+	strcpy(g_proxy_bounced_url, u);
+	macsurf_debug_log_writef("LIFE proxy %s -> %s %s", why,
+		c->is_https ? "macTLS" : "direct", u);
+	(void)fetch_set_http_code(c->parent, 307);
+	rm.type = FETCH_REDIRECT;
+	rm.data.redirect = g_proxy_bounced_url;
+	c->state = MFS_NOTIFIED;
+	c->keep_alive_ok = 0;
+	parent_save = c->parent;
+	fetch_send_callback(&rm, parent_save);
+	fetch_remove_from_queues(parent_save);
+	fetch_free(parent_save);
+	return 1;
+}
+
+/* WebOne merges every Set-Cookie of a response into one line, which
+ * would store a single garbled cookie. Before any header reaches core,
+ * remember the host as a cookie host (route() then skips the proxy for
+ * it) and fetch the URL again without the proxy. A lone cookie passes
+ * through intact and is accepted. Returns 1 if the slot was handed back. */
+static int mfs_refetch_if_cookies_mangled(struct macos9_fetch_ctx *c,
+	const char *sep)
+{
+	lwc_string *host_lwc;
+	char host[MACOS9_PROXY_COOKIE_HOST_LEN];
+	size_t host_len;
+	if (!c->proxy_mangles_cookies || !nsoption_bool(accept_cookies) ||
+	    !mfs_headers_merged_cookie(c->h_buf, sep)) {
+		return 0;
+	}
+	host_lwc = nsurl_get_component(c->url, NSURL_HOST);
+	if (host_lwc == NULL) return 0;
+	host_len = lwc_string_length(host_lwc);
+	if (host_len >= sizeof host) host_len = sizeof host - 1;
+	memcpy(host, lwc_string_data(host_lwc), host_len);
+	host[host_len] = '\0';
+	lwc_string_unref(host_lwc);
+	macos9_proxy_note_cookie_host(host);
+	return mfs_redirect_to_self(c, "set-cookie");
+}
+
 static void mfs_parse_headers(struct macos9_fetch_ctx *c) {
 	char *sep = strstr(c->h_buf, "\r\n\r\n"), *p, *cur; long cur_len; fetch_msg msg;
 	/* fixes979 - 304 Not Modified. Set once the status line is parsed;
@@ -990,6 +1072,7 @@ static void mfs_parse_headers(struct macos9_fetch_ctx *c) {
 	 * thing for a form submission. */
 	int notmod = 0;
 	if(!sep) return;
+	if (mfs_refetch_if_cookies_mangled(c, sep)) return;
 	/* fixes641 (#193): do NOT NUL sep's '\r'. macos9_find_line is length-bounded
 	 * by cur_len and NULs each line's own '\r'; the old `*sep=0` clobbered the
 	 * final header's terminating '\r' so the LAST header (e.g. Set-Cookie on a
@@ -1501,22 +1584,9 @@ static void macos9_http_poll(lwc_string *s) {
 			 * macTLS: 307 to itself re-enters the https fetcher,
 			 * which skips the proxy for this URL once. */
 			if (c->is_https && c->proxy_connect_failed &&
-			    c->aborted == 0 && c->url != NULL) {
-				const char *u = nsurl_access(c->url);
-				if (strlen(u) < sizeof g_proxy_bounced_url) {
-					fetch_msg rm;
-					strcpy(g_proxy_bounced_url, u);
-					macsurf_debug_log_writef(
-						"http: proxy bounce -> macTLS %s", u);
-					(void)fetch_set_http_code(c->parent, 307);
-					rm.type = FETCH_REDIRECT;
-					rm.data.redirect = g_proxy_bounced_url;
-					c->state = MFS_NOTIFIED;
-					fetch_send_callback(&rm, c->parent);
-					fetch_remove_from_queues(c->parent);
-					fetch_free(c->parent);
-					continue;
-				}
+			    c->aborted == 0 &&
+			    mfs_redirect_to_self(c, "unavailable")) {
+				continue;
 			}
 			if (c->via_proxy) {
 				fetch_msg m; m.type=FETCH_ERROR; m.data.error=c->err;

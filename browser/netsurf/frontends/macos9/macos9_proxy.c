@@ -20,6 +20,8 @@ static int g_probe_in_flight = 0;
 static unsigned long g_state_since = 0;
 static char g_consent_record[MACOS9_PROXY_TARGET_LEN + 2];
 static int g_consent_prompted = 0;
+static char g_cookie_hosts[MACOS9_PROXY_COOKIE_HOSTS][MACOS9_PROXY_COOKIE_HOST_LEN];
+static int g_cookie_next = 0;
 
 static int ascii_lower(int c)
 {
@@ -180,8 +182,28 @@ static int consent_for_current_target(void)
 	return MACOS9_PROXY_CONSENT_UNASKED;
 }
 
+static void clear_cookie_hosts(void)
+{
+	int i;
+	for (i = 0; i < MACOS9_PROXY_COOKIE_HOSTS; i++) g_cookie_hosts[i][0] = '\0';
+	g_cookie_next = 0;
+}
+
+static int is_cookie_host(const char *host)
+{
+	int i;
+	for (i = 0; i < MACOS9_PROXY_COOKIE_HOSTS; i++) {
+		if (g_cookie_hosts[i][0] != '\0' &&
+		    strings_equal_ci(g_cookie_hosts[i], host)) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static void reset_unconfigured(void)
 {
+	clear_cookie_hosts();
 	g_state = MACOS9_PROXY_UNCONFIGURED;
 	g_kind = MACOS9_PROXY_KIND_NONE;
 	g_host[0] = '\0';
@@ -207,6 +229,7 @@ void macos9_proxy_configure(int enabled, const char *host, int port)
 	    strcmp(new_target, g_target) == 0) {
 		return;
 	}
+	clear_cookie_hosts();
 	strcpy(g_host, host);
 	strcpy(g_target, new_target);
 	g_port = port;
@@ -325,10 +348,84 @@ int macos9_proxy_route(const char *host, int is_https, int has_body,
 	    host_in_noproxy_list(host, noproxy_list)) {
 		return 0;
 	}
+	if (macos9_proxy_mangles_cookies() &&
+	    (has_body || strlen(host) >= MACOS9_PROXY_COOKIE_HOST_LEN ||
+	     is_cookie_host(host))) {
+		return 0;
+	}
 	if (!is_https) return 1;
 	return g_kind == MACOS9_PROXY_KIND_WEBONE &&
 		consent_for_current_target() == MACOS9_PROXY_CONSENT_YES &&
 		!has_body;
+}
+
+int macos9_proxy_mangles_cookies(void)
+{
+	return g_kind == MACOS9_PROXY_KIND_WEBONE;
+}
+
+static int is_cookie_attribute(const char *name, long len)
+{
+	static const char *const attributes[] = {
+		"expires", "max-age", "domain", "path", "secure", "httponly",
+		"samesite", "priority", "partitioned"
+	};
+	size_t i;
+	for (i = 0; i < sizeof attributes / sizeof attributes[0]; i++) {
+		if ((long)strlen(attributes[i]) == len &&
+		    prefix_equals_ci(name, attributes[i])) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int macos9_proxy_set_cookie_merged(const char *value, long len)
+{
+	long seg_end = 0;
+	long start;
+	long end;
+	long eq;
+	long j;
+	int first = 1;
+
+	if (value == NULL) return 0;
+	while (seg_end <= len) {
+		start = seg_end;
+		while (seg_end < len && value[seg_end] != ';') seg_end++;
+		end = seg_end;
+		while (start < end && value[start] == ' ') start++;
+		while (end > start && value[end - 1] == ' ') end--;
+		if (end > start) {
+			eq = start;
+			while (eq < end && value[eq] != '=') eq++;
+			if (first) {
+				for (j = eq + 1; j + 1 < end; j++) {
+					if (value[j] == '=' && value[j + 1] != '=')
+						return 1;
+				}
+			} else {
+				if (!is_cookie_attribute(value + start, eq - start))
+					return 1;
+				for (j = eq + 1; j < end; j++) {
+					if (value[j] == '=') return 1;
+				}
+			}
+			first = 0;
+		}
+		seg_end++;
+	}
+	return 0;
+}
+
+void macos9_proxy_note_cookie_host(const char *host)
+{
+	if (host == NULL || host[0] == '\0' ||
+	    strlen(host) >= MACOS9_PROXY_COOKIE_HOST_LEN || is_cookie_host(host)) {
+		return;
+	}
+	strcpy(g_cookie_hosts[g_cookie_next], host);
+	g_cookie_next = (g_cookie_next + 1) % MACOS9_PROXY_COOKIE_HOSTS;
 }
 
 int macos9_proxy_take_consent_prompt(void)

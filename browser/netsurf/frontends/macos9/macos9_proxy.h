@@ -18,6 +18,10 @@
 #define MACOS9_PROXY_HOST_LEN    64
 #define MACOS9_PROXY_TARGET_LEN  80
 
+/* Session memory of origins that set cookies (see note_cookie_host). */
+#define MACOS9_PROXY_COOKIE_HOSTS     16
+#define MACOS9_PROXY_COOKIE_HOST_LEN  128
+
 /* 60 Hz ticks */
 #define MACOS9_PROXY_COOLOFF_TICKS   3600UL   /* 60 s direct-only after a failure */
 #define MACOS9_PROXY_RECHECK_TICKS   7200UL   /* re-probe a healthy proxy every 120 s */
@@ -75,9 +79,26 @@ void macos9_proxy_note_failure(unsigned long now);
 
 /* Routing: 1 if a request for host should go through the proxy now.
  * HTTPS needs a WebOne proxy and stored consent, and never carries a
- * request body (logins stay end-to-end TLS). */
+ * request body (logins stay end-to-end TLS). A WebOne proxy never
+ * carries a request body at all, nor any request to a cookie host. */
 int macos9_proxy_route(const char *host, int is_https, int has_body,
 	const char *noproxy_list);
+
+/* 1 while the current proxy merges multiple Set-Cookie headers into one
+ * unparseable line (WebOne 0.18.3 does), so responses that set several
+ * cookies must be fetched again without it. */
+int macos9_proxy_mangles_cookies(void);
+
+/* 1 if a Set-Cookie value (len bytes, no "Set-Cookie:" prefix) looks like
+ * several cookies run together: an unknown attribute, an attribute value
+ * containing '=', or a second name=value inside the first pair. Errs
+ * towards 1; a false positive only costs the proxy for that host. */
+int macos9_proxy_set_cookie_merged(const char *value, long len);
+
+/* Remember for this session that host sets cookies; route() then sends
+ * it direct while the proxy mangles cookies. The list is a ring, so the
+ * host just noted is always remembered. Cleared when the target changes. */
+void macos9_proxy_note_cookie_host(const char *host);
 
 /* 1 once per proxy target when an https-capable proxy is up and the
  * user has not been asked yet. Calling it marks the question as asked. */

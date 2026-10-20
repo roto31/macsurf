@@ -38,6 +38,12 @@ hardware; no binary has been published.
   TLS handshake instead of this Mac). Answer is stored in the `http_proxy_https_consent` option and
   can be changed under View > Use Proxy for Secure Sites. Requests with a body, Facebook hosts,
   and any request the proxy cannot take stay on macTLS end-to-end.
+- Cookie guard for WebOne. WebOne 0.18.3 merges all `Set-Cookie` headers of a response into one
+  unparseable line (seen on GitHub and httpbin; Squid and direct fetches are unaffected). When a
+  response through WebOne carries a merged cookie line, nothing reaches the page: the request is
+  re-issued without the proxy (direct for http, macTLS for https) and that host skips WebOne for
+  the rest of the session. A single cookie (apple.com's `geo`) passes intact. Requests with a body
+  never use WebOne, for http as well as https.
 - View menu: Use Proxy When Available, Use Proxy for Secure Sites, Set Proxy Server…, and a
   status line (none / checking / WebOne or Squid address / not answering).
 - `PERFACC` log line gains `connect=` (time the http fetcher spent blocked in Open Transport

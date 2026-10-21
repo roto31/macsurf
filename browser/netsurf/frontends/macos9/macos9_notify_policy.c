@@ -91,3 +91,14 @@ int macos9_notify_place(const macos9_notify_rect *usable, int position, int widt
 	return out->left >= usable->left && out->right <= usable->right &&
 	       out->top >= usable->top && out->bottom <= usable->bottom;
 }
+
+void macos9_notify_place_alert(const macos9_notify_rect *usable, int width, int height,
+                               macos9_notify_rect *out)
+{
+	int spare_height = usable->bottom - usable->top - height;
+
+	out->left = (usable->left + usable->right - width) / 2;
+	out->top = usable->top + (spare_height > 0 ? spare_height / 3 : 0);
+	out->right = out->left + width;
+	out->bottom = out->top + height;
+}

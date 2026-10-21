@@ -53,4 +53,9 @@ void macos9_notify_build_prefs(const macos9_notify_settings *settings, ln_prefs 
 int macos9_notify_place(const macos9_notify_rect *usable, int position, int width, int height,
                         int offset, macos9_notify_rect *out);
 
+/* Places a question where Mac alerts go: centred across usable, with a third
+ * of the leftover height above it, so it never covers the notice stacks. */
+void macos9_notify_place_alert(const macos9_notify_rect *usable, int width, int height,
+                               macos9_notify_rect *out);
+
 #endif

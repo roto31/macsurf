@@ -906,7 +906,7 @@ static int notify_ask_with(const macos9_notify_settings *settings, macos9_dialog
 		return 0;
 	}
 
-	macos9_notify_place(&usable, result.position, d.width, d.height + notify_frame_top(d.win), 0, &placed);
+	macos9_notify_place_alert(&usable, d.width, d.height + notify_frame_top(d.win), &placed);
 	MoveWindow(d.win, (short)placed.left, (short)(placed.top + notify_frame_top(d.win)), false);
 	ShowWindow(d.win);
 	SelectWindow(d.win);

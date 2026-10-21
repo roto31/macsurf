@@ -450,12 +450,12 @@ static const Rect s_pp_perhost_rect       = { 152, 280, 174, 380 };
 static const Rect s_ck_service_ctrl_rect  = {  76,  24,  96,  44 };
 static const Rect s_ck_service_row_rect   = {  76,  24,  96, 456 };
 static const Rect s_ck_cat_ctrl_rect[PREFS_NOTIFY_CATEGORIES] = {
-	{ 112, 140, 132, 160 }, { 112, 300, 132, 320 },
-	{ 136, 140, 156, 160 }, { 136, 300, 156, 320 }
+	{ 112, 160, 132, 180 }, { 112, 312, 132, 332 },
+	{ 136, 160, 156, 180 }, { 136, 312, 156, 332 }
 };
 static const Rect s_ck_cat_row_rect[PREFS_NOTIFY_CATEGORIES] = {
-	{ 112, 140, 132, 296 }, { 112, 300, 132, 456 },
-	{ 136, 140, 156, 296 }, { 136, 300, 156, 456 }
+	{ 112, 160, 132, 308 }, { 112, 312, 132, 456 },
+	{ 136, 160, 156, 308 }, { 136, 312, 156, 456 }
 };
 static const Rect s_pp_position_rect      = { 168, 112, 190, 262 };
 static const Rect s_pp_duration_rect      = { 168, 372, 190, 452 };

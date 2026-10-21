@@ -17,6 +17,7 @@
 #include "macsurf_timebase.h"
 #include "macsurf_osver.h"     /* fixes936 -- macsurf_os_is_osx() */
 #include "lotus_theme.h"
+#include "macos9_notify.h"
 
 #ifdef __MACOS9__
 #include <OpenTransport.h>
@@ -426,7 +427,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 	 * own ID as menu_id; route it to the folder's Nth bookmark. */
 	if (menu_id >= MENU_BMK_SUB_BASE &&
 	    menu_id < MENU_BMK_SUB_BASE + MENU_BMK_SUB_MAX) {
-		front = FrontWindow();
+		front = FrontNonFloatingWindow();
 		gw = front ? macos9_find_window(front) : NULL;
 		if (gw != NULL)
 			macos9_bookmark_submenu_navigate(gw, menu_id, item);
@@ -464,7 +465,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 		case ITEM_FILE_NEWTAB: {
 			/* Cmd-T: open a new tab in the current scaffold window.
 			 * If no window exists, create one (same as File > New). */
-			WindowRef wfront = FrontWindow();
+			WindowRef wfront = FrontNonFloatingWindow();
 			struct gui_window *gcur = wfront ? macos9_find_window(wfront) : NULL;
 			macos9_new_tab(gcur);
 		} break;
@@ -474,7 +475,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 			 * dead menu entry before this fix (menu accepted Cmd+L
 			 * via the "/L" suffix but no handler ran, so the user
 			 * got no visible response). */
-			WindowRef wfront = FrontWindow();
+			WindowRef wfront = FrontNonFloatingWindow();
 			struct gui_window *gwl = wfront ? macos9_find_window(wfront) : NULL;
 			if (gwl != NULL) {
 				extern void macos9_window_te_activate_url(struct gui_window *);
@@ -489,7 +490,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 			/* Cmd-W / File>Close: tab-aware close.
 			 * If the window has >1 tab, close just the active tab.
 			 * If it has 1 tab (or no scaffold), close the window. */
-			front = FrontWindow();
+			front = FrontNonFloatingWindow();
 			if (macos9_download_mgr_is(front)) {
 				macos9_download_mgr_hide();
 				break;
@@ -518,7 +519,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 			break;
 		case ITEM_FILE_SENDLOG:
 			/* fixes720: POST the Desktop MacSurf Debug.log to the server. */
-			front = FrontWindow();
+			front = FrontNonFloatingWindow();
 			gw = front ? macos9_find_window(front) : NULL;
 			if (gw != NULL)
 				macos9_send_debug_log(gw);
@@ -530,7 +531,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 		}
 		break;
 	case MENU_GO:
-		front = FrontWindow();
+		front = FrontNonFloatingWindow();
 		gw = front ? macos9_find_window(front) : NULL;
 		if (!gw) break;
 		switch (item) {
@@ -547,7 +548,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 			macos9_proxy_mac_menu_command(item);
 			break;
 		}
-		front = FrontWindow();
+		front = FrontNonFloatingWindow();
 		gw = front ? macos9_find_window(front) : NULL;
 		if (!gw) break;
 		switch (item) {
@@ -590,7 +591,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 	case MENU_BOOKMARK:
 		/* fixes641 (#200): derive the front window FIRST (this case used
 		 * to run with an uninitialized `gw`). */
-		front = FrontWindow();
+		front = FrontNonFloatingWindow();
 		gw = front ? macos9_find_window(front) : NULL;
 		if (gw == NULL) gw = macos9_window_list_head();
 		/* fixes645 (#48) - item 1 adds the current page; items >= 3 are
@@ -611,7 +612,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 		/* fixes694/698 (#47) - item 1 clears history; items >= 3 are
 		 * recent-visit entries (item 2 is the separator, never selectable)
 		 * and navigate the front window. Menu refreshed on menu-bar click. */
-		front = FrontWindow();
+		front = FrontNonFloatingWindow();
 		gw = front ? macos9_find_window(front) : NULL;
 		if (gw == NULL) gw = macos9_window_list_head();
 		if (item == ITEM_HIST_SHOW_ALL) {
@@ -632,7 +633,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 		 * the NetSurf NS_KEY_* edit code to the page so in-page form
 		 * fields (textarea/input) copy/cut/paste via desktop/textarea.c
 		 * + the clipboard.c Scrap callbacks. */
-		front = FrontWindow();
+		front = FrontNonFloatingWindow();
 		gw = front ? macos9_find_window(front) : NULL;
 		if (gw == NULL)
 			break;
@@ -711,6 +712,7 @@ void macos9_handle_update(const EventRecord *event) {
 	 * gui_window, so macos9_find_window returns NULL and the update would
 	 * be dropped. Draw it here and return before the gui_window path. */
 	if (macos9_download_mgr_is(win)) { macos9_download_mgr_draw(); return; }
+	if (macos9_notify_owns(win)) { macos9_notify_draw(win); return; }
 	if (!gw || macos9_quitting) return;
 	SetPortWindowPort(win); BeginUpdate(win);
 	/* fixes77f -- offscreen GWorld V2.
@@ -1012,6 +1014,10 @@ void macos9_handle_mouse_down(const EventRecord *event) {
 		macos9_download_mgr_click(part, event->where);
 		return;
 	}
+	if (macos9_notify_owns(win)) {
+		macos9_notify_click(win, part, event->where);
+		return;
+	}
 	switch (part) {
 		case inMenuBar: {
 			long sel;
@@ -1122,7 +1128,7 @@ void macos9_handle_mouse_down(const EventRecord *event) {
 			break;
 		case inContent:
 			if (win) {
-				if (win != FrontWindow()) {
+				if (win != FrontNonFloatingWindow()) {
 					SelectWindow(win);
 				} else {
 					Point p = event->where;
@@ -1368,7 +1374,7 @@ static void macos9_zoom_apply(struct gui_window *gw, float amount, int absolute)
 
 void macos9_handle_key_down(const EventRecord *event) {
 #ifdef __MACOS9__
-	WindowRef win = FrontWindow();
+	WindowRef win = FrontNonFloatingWindow();
 	struct gui_window *gw = win ? macos9_find_window(win) : NULL;
 	char ch = (char)(event->message & charCodeMask);
 	long sel;
@@ -1603,10 +1609,11 @@ void macos9_poll(void) {
 		 * running every loop iteration. */
 		{ macos9_op_depth++; fetch_pump(); macos9_op_depth--; }
 		macos9_proxy_mac_idle();
+		macos9_notify_idle();
 		macos9_windows_te_idle(); macos9_windows_process_deferred();
 		/* fixes725 - nav-button hover highlight: track the pointer over the
 		 * front window's toolbar (cheap; only repaints on a hover change). */
-		{ WindowRef hfw = FrontWindow();
+		{ WindowRef hfw = FrontNonFloatingWindow();
 		  struct gui_window *hfg = hfw ? macos9_find_window(hfw) : NULL;
 		  if (hfg != NULL) {
 			  macos9_window_update_hover(hfg);
@@ -1620,7 +1627,7 @@ void macos9_poll(void) {
 		 * are the whole point of measuring). first-paint would emit too
 		 * early and miss the reflow storm. */
 		{
-			WindowRef pf_win = FrontWindow();
+			WindowRef pf_win = FrontNonFloatingWindow();
 			struct gui_window *pf_gw = pf_win ?
 				macos9_find_window(pf_win) : NULL;
 			if (pf_gw != NULL && pf_gw->bw != NULL) {
@@ -1670,7 +1677,7 @@ void macos9_poll_mouse_hover(void) {
 	Point p;
 	int x_ns, y_ns;
 	if (macos9_quitting) return;
-	win = FrontWindow();
+	win = FrontNonFloatingWindow();
 	gw = win ? macos9_find_window(win) : NULL;
 	if (!gw || !gw->bw) return;
 	/* fixes430: skip hover dispatch while a new page is loading.
@@ -1855,7 +1862,7 @@ static pascal OSErr macos9_ae_get_url(const AppleEvent *ae,
 			(unsigned long)(sizeof(url) - 1)) return errAEEventNotHandled;
 	url[actual] = '\0';
 	macos9_startup_home_pending = 0;
-	fw = FrontWindow();
+	fw = FrontNonFloatingWindow();
 	g = (fw != NULL) ? macos9_find_window(fw) : macos9_window_list_head();
 	if (g == NULL) g = macos9_create_initial_window();
 	if (g == NULL) return errAEEventNotHandled;

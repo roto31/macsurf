@@ -1079,7 +1079,7 @@ void macos9_download_mgr_click(short part, Point where)
 		short cpart;
 		Rect list;
 
-		if (g_dl_mgr_win != FrontWindow()) {
+		if (g_dl_mgr_win != FrontNonFloatingWindow()) {
 			SelectWindow(g_dl_mgr_win);
 			return;
 		}

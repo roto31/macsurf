@@ -3,7 +3,7 @@
  * gui_layout_table callbacks.
  *
  * v0.5 rewrite: 
- *   - Use FrontWindow() fallback for layout port if initial_win is NULL.
+ *   - Use FrontNonFloatingWindow() fallback for layout port if initial_win is NULL.
  *   - Linear scan for position/split (more reliable than UTF-8 binary search).
  *   - Robust UTF-8 handling.
  */
@@ -435,8 +435,8 @@ macos9_font_measure(const struct plot_font_style *fstyle,
                 if (initial_win != NULL && initial_win->window != NULL) {
                         SetPortWindowPort(initial_win->window);
                         changed_port = true;
-                } else if (FrontWindow() != NULL) {
-                        SetPortWindowPort(FrontWindow());
+                } else if (FrontNonFloatingWindow() != NULL) {
+                        SetPortWindowPort(FrontNonFloatingWindow());
                         changed_port = true;
                 }
         }
@@ -924,13 +924,13 @@ macos9_font_metric_probe_run(void)
 
         /* fixes144a2: initial_win is only set by macos9_create_initial_window
          * (the fallback path); the normal BW_CREATE path leaves it NULL. Use
-         * FrontWindow() as the port source instead - same pattern as
+         * FrontNonFloatingWindow() as the port source instead - same pattern as
          * macos9_font_measure. */
         GetPort(&old_port);
         if (initial_win != NULL && initial_win->window != NULL) {
                 SetPortWindowPort(initial_win->window);
-        } else if (FrontWindow() != NULL) {
-                SetPortWindowPort(FrontWindow());
+        } else if (FrontNonFloatingWindow() != NULL) {
+                SetPortWindowPort(FrontNonFloatingWindow());
         } else {
                 /* No window yet; can't measure. Drop the run silently;
                  * has_run stays true so we don't try again. */
@@ -1027,8 +1027,8 @@ macos9_font_vmetric_probe_run(void)
         GetPort(&old_port);
         if (initial_win != NULL && initial_win->window != NULL) {
                 SetPortWindowPort(initial_win->window);
-        } else if (FrontWindow() != NULL) {
-                SetPortWindowPort(FrontWindow());
+        } else if (FrontNonFloatingWindow() != NULL) {
+                SetPortWindowPort(FrontNonFloatingWindow());
         } else {
                 macsurf_debug_log_write(
                     "FONT VMETRIC PROBE: no window available, skipping");

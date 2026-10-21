@@ -50,8 +50,23 @@ hardware; no binary has been published.
   status line (none / checking / WebOne or Squid address / not answering).
 - `PERFACC` log line gains `connect=` (time the http fetcher spent blocked in Open Transport
   connect; not part of `total=`) and `via=direct|proxy|mixed`.
+- Built-in notifications (Lotus Notify N2). Banners float above browser windows in any of six
+  positions (upper/lower left, centre or right), at most three stacked per position with the rest
+  queued; they close after 3–15 seconds or on click, and a click opens the notice's link. Pop-up
+  boxes stay until OK; progress notices show a Leopard-blue bar. Questions are movable modal
+  dialogs with up to three buttons, an icon, wrapped long text and an optional checkbox (Return
+  picks the default button, Esc or ⌘-. the cancel button); they always appear, even with
+  notifications off. See [`macos9_notify.h`](browser/netsurf/frontends/macos9/macos9_notify.h).
+- Preferences: a Notifications tab (position, banner duration, style per notice type, sound, the
+  downloads/proxy/security/housekeeping switches) with a Show Examples button. Settings are
+  stored as `notify_*` options in `desktop/options.h`.
 
 ### Changed
+
+- Keyboard, menu and window routing use `FrontNonFloatingWindow()` instead of `FrontWindow()`
+  (in `main.c`, `macos9_font.c`, `macos9_download.c` and `macsurf_debug.c`) so a visible banner
+  never takes commands meant for the browser window.
+- Preferences tabs use the small tab style so six tabs fit the existing window width.
 
 - `http_proxy` now defaults to on. With no proxy address configured it does nothing.
 - New chrome colour scheme matched to Mac OS X 10.5 Leopard's Aqua Blue, replacing MacSurf's

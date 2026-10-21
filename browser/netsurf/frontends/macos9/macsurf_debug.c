@@ -170,7 +170,7 @@ macsurf_debug_set_title(const char *msg)
 
 	if (g_title_locked) return;
 
-	w = FrontWindow();
+	w = FrontNonFloatingWindow();
 	if (w == NULL || msg == NULL) return;
 
 	len = strlen(msg);

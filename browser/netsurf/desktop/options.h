@@ -64,6 +64,23 @@ NSOPTION_STRING(http_proxy_noproxy, "localhost")
  * "!<host:port>" for no (frontends/macos9/macos9_proxy.h). */
 NSOPTION_STRING(http_proxy_https_consent, NULL)
 
+/** Lotus Navigator notifications (frontends/macos9/macos9_notify.h).
+ * Styles and positions use the Lotus Notify core values; style 0 is the
+ * built-in style for the type, position 1 is the upper right corner. */
+NSOPTION_BOOL(notify_use_service, true)
+NSOPTION_INTEGER(notify_style_info, 0)
+NSOPTION_INTEGER(notify_style_progress, 0)
+NSOPTION_INTEGER(notify_style_warning, 0)
+NSOPTION_INTEGER(notify_style_error, 0)
+NSOPTION_INTEGER(notify_position, 1)
+NSOPTION_INTEGER(notify_banner_seconds, 5)
+NSOPTION_BOOL(notify_sound, true)
+NSOPTION_BOOL(notify_downloads, true)
+NSOPTION_BOOL(notify_proxy, true)
+NSOPTION_BOOL(notify_security, true)
+NSOPTION_BOOL(notify_housekeeping, true)
+NSOPTION_BOOL(notify_web, false)
+
 /** Default treeview font size (unit: 0.1pt) */
 NSOPTION_INTEGER(treeview_font_size, 110)
 

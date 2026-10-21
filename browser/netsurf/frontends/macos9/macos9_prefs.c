@@ -13,8 +13,8 @@
  *
  *   3. macos9_prefs_show()
  *      Programmatic native Carbon / Appearance Manager Preferences window.
- *      Organized into General, Web Content, Appearance, Privacy, and
- *      Advanced categories with descriptive explanations, reliable
+ *      Organized into General, Web Content, Appearance, Privacy,
+ *      Advanced and Notifications categories with descriptive explanations, reliable
  *      checkbox and popup tracking, draft/cancel semantics, and homepage
  *      helpers.
  *
@@ -35,6 +35,7 @@
 #include "macsurf_config.h"	/* MACSURF_HOME_URL */
 #include "macsurf_debug.h"
 #include "lotus_theme.h"
+#include "macos9_notify.h"
 
 #ifdef __MACOS9__
 #include <Carbon.h>
@@ -259,6 +260,7 @@ enum {
 	PREFS_CAT_APPEAR,
 	PREFS_CAT_PRIVACY,
 	PREFS_CAT_NETWORK,
+	PREFS_CAT_NOTIFY,
 	PREFS_CAT_COUNT
 };
 
@@ -269,7 +271,7 @@ struct prefs_popup_def {
 };
 
 static const char *s_lbl_cat[] = {
-	"General", "Web Content", "Appearance", "Privacy", "Advanced"
+	"General", "Web Content", "Appearance", "Privacy", "Advanced", "Notifications"
 };
 
 static const char *s_lbl_font[] = {
@@ -301,6 +303,44 @@ static const char *s_lbl_perhost[] = { "1", "2", "3", "4", "6", "8", "12", "16" 
 static const int s_val_perhost[] = { 1, 2, 3, 4, 6, 8, 12, 16 };
 static const struct prefs_popup_def s_popup_perhost = {
 	s_lbl_perhost, s_val_perhost, 8
+};
+
+/* Notifications panel: values are Lotus Notify core ln_position / ln_style. */
+static const char *s_lbl_position[] = {
+	"Upper right corner", "Upper left corner", "Lower right corner",
+	"Lower left corner", "Top centre", "Centre of the screen"
+};
+static const int s_val_position[] = {
+	LN_POSITION_UPPER_RIGHT, LN_POSITION_UPPER_LEFT, LN_POSITION_LOWER_RIGHT,
+	LN_POSITION_LOWER_LEFT, LN_POSITION_TOP_CENTRE, LN_POSITION_CENTRE
+};
+static const struct prefs_popup_def s_popup_position = {
+	s_lbl_position, s_val_position, 6
+};
+
+static const char *s_lbl_duration[] = { "3 s", "5 s", "8 s", "10 s", "15 s" };
+static const int s_val_duration[] = { 3, 5, 8, 10, 15 };
+static const struct prefs_popup_def s_popup_duration = {
+	s_lbl_duration, s_val_duration, 5
+};
+
+static const char *s_lbl_style[] = { "Default", "Banner", "Pop-up box", "None" };
+static const int s_val_style[] = { LN_STYLE_DEFAULT, LN_STYLE_BANNER, LN_STYLE_POPUP, LN_STYLE_NONE };
+static const struct prefs_popup_def s_popup_style = {
+	s_lbl_style, s_val_style, 4
+};
+
+#define PREFS_NOTIFY_STYLES     4
+#define PREFS_NOTIFY_CATEGORIES 4
+static const int s_notify_style_types[PREFS_NOTIFY_STYLES] = {
+	LN_TYPE_INFO, LN_TYPE_PROGRESS, LN_TYPE_WARNING, LN_TYPE_ERROR
+};
+static const char *s_notify_style_labels[PREFS_NOTIFY_STYLES] = {
+	"Information:", "Progress:", "Warning:", "Error:"
+};
+/* Indexes match MACOS9_NOTIFY_DOWNLOADS .. MACOS9_NOTIFY_HOUSEKEEPING. */
+static const char *s_notify_category_labels[PREFS_NOTIFY_CATEGORIES] = {
+	"Downloads", "Proxy", "Security", "Housekeeping"
 };
 
 static WindowRef g_prefs_open_win = NULL;
@@ -340,6 +380,17 @@ struct prefs_win {
 	MenuHandle m_fetch;
 	ControlRef pp_perhost;
 	MenuHandle m_perhost;
+	/* Notifications */
+	ControlRef ck_service;
+	ControlRef ck_cat[PREFS_NOTIFY_CATEGORIES];
+	ControlRef pp_position;
+	MenuHandle m_position;
+	ControlRef pp_duration;
+	MenuHandle m_duration;
+	ControlRef pp_style[PREFS_NOTIFY_STYLES];
+	MenuHandle m_style[PREFS_NOTIFY_STYLES];
+	ControlRef ck_sound;
+	ControlRef btn_examples;
 	/* Bottom buttons */
 	ControlRef btn_defaults;
 	ControlRef btn_cancel;
@@ -395,10 +446,34 @@ static const Rect s_btn_hist_rect         = { 230, 175, 254, 310 };
 static const Rect s_pp_fetch_rect         = {  88, 280, 110, 380 };
 static const Rect s_pp_perhost_rect       = { 152, 280, 174, 380 };
 
+/* Notifications panel */
+static const Rect s_ck_service_ctrl_rect  = {  76,  24,  96,  44 };
+static const Rect s_ck_service_row_rect   = {  76,  24,  96, 456 };
+static const Rect s_ck_cat_ctrl_rect[PREFS_NOTIFY_CATEGORIES] = {
+	{ 112, 140, 132, 160 }, { 112, 300, 132, 320 },
+	{ 136, 140, 156, 160 }, { 136, 300, 156, 320 }
+};
+static const Rect s_ck_cat_row_rect[PREFS_NOTIFY_CATEGORIES] = {
+	{ 112, 140, 132, 296 }, { 112, 300, 132, 456 },
+	{ 136, 140, 156, 296 }, { 136, 300, 156, 456 }
+};
+static const Rect s_pp_position_rect      = { 168, 112, 190, 262 };
+static const Rect s_pp_duration_rect      = { 168, 372, 190, 452 };
+static const Rect s_pp_style_rect[PREFS_NOTIFY_STYLES] = {
+	{ 202, 112, 224, 232 }, { 202, 332, 224, 452 },
+	{ 232, 112, 254, 232 }, { 232, 332, 254, 452 }
+};
+static const Rect s_ck_sound_ctrl_rect    = { 264,  24, 284,  44 };
+static const Rect s_ck_sound_row_rect     = { 264,  24, 284, 456 };
+static const Rect s_btn_examples_rect     = { 316,  24, 340, 154 };
+
 #define PREFS_MENU_ID_FONT    261
 #define PREFS_MENU_ID_MINFONT 262
 #define PREFS_MENU_ID_FETCH   263
 #define PREFS_MENU_ID_PERHOST 264
+#define PREFS_MENU_ID_POSITION 265
+#define PREFS_MENU_ID_DURATION 266
+#define PREFS_MENU_ID_STYLE    267   /* 267..270, one per style popup */
 
 static void c_to_pstring(const char *src, unsigned char *dest)
 {
@@ -520,7 +595,7 @@ static ControlRef prefs_create_tabs(WindowRef win, const Rect *r,
 	if (initial_tab < 1) initial_tab = 1;
 	if (initial_tab > count) initial_tab = count;
 	c = NewControl(win, r, "\p", true, 0, 1, (short)count,
-		kControlTabLargeProc, 0);
+		kControlTabSmallProc, 0);
 	if (c == NULL) return NULL;
 	for (i = 1; i <= count; i++) {
 		ControlTabInfoRec info;
@@ -670,6 +745,49 @@ static void prefs_panel_vis(struct prefs_win *pw)
 	/* Advanced */
 	prefs_set_vis(pw->pp_fetch,         pw->cat == PREFS_CAT_NETWORK);
 	prefs_set_vis(pw->pp_perhost,       pw->cat == PREFS_CAT_NETWORK);
+	/* Notifications */
+	{
+		int show = pw->cat == PREFS_CAT_NOTIFY;
+		int i;
+		prefs_set_vis(pw->ck_service, show);
+		for (i = 0; i < PREFS_NOTIFY_CATEGORIES; i++) prefs_set_vis(pw->ck_cat[i], show);
+		prefs_set_vis(pw->pp_position, show);
+		prefs_set_vis(pw->pp_duration, show);
+		for (i = 0; i < PREFS_NOTIFY_STYLES; i++) prefs_set_vis(pw->pp_style[i], show);
+		prefs_set_vis(pw->ck_sound, show);
+		prefs_set_vis(pw->btn_examples, show);
+	}
+}
+
+/* Notification settings as shown in the panel (not yet saved). */
+static void prefs_notify_from_ui(struct prefs_win *pw, macos9_notify_settings *s)
+{
+	int i;
+	macos9_notify_settings_from_options(s);
+	for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
+		int type = s_notify_style_types[i];
+		s->style[type] = prefs_popup_get(pw->pp_style[i], &s_popup_style, s->style[type]);
+	}
+	s->position = prefs_popup_get(pw->pp_position, &s_popup_position, s->position);
+	s->banner_seconds = prefs_popup_get(pw->pp_duration, &s_popup_duration, s->banner_seconds);
+	s->sound = prefs_get_val(pw->ck_sound, s->sound) != 0;
+	for (i = 0; i < PREFS_NOTIFY_CATEGORIES; i++) {
+		s->category_on[i] = prefs_get_val(pw->ck_cat[i], s->category_on[i]) != 0;
+	}
+}
+
+static void prefs_notify_to_ui(struct prefs_win *pw, const macos9_notify_settings *s, int use_service)
+{
+	int i;
+	prefs_set_val(pw->ck_service, use_service ? 1 : 0);
+	for (i = 0; i < PREFS_NOTIFY_CATEGORIES; i++) prefs_set_val(pw->ck_cat[i], s->category_on[i] ? 1 : 0);
+	prefs_popup_set_item(pw->pp_position, pw->m_position, prefs_popup_item(&s_popup_position, s->position));
+	prefs_popup_set_item(pw->pp_duration, pw->m_duration, prefs_popup_item(&s_popup_duration, s->banner_seconds));
+	for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
+		prefs_popup_set_item(pw->pp_style[i], pw->m_style[i],
+			prefs_popup_item(&s_popup_style, s->style[s_notify_style_types[i]]));
+	}
+	prefs_set_val(pw->ck_sound, s->sound ? 1 : 0);
 }
 
 static void prefs_set_cat(struct prefs_win *pw, int cat)
@@ -802,6 +920,16 @@ static void prefs_apply_from_ui(struct prefs_win *pw)
 	if (pw->pp_perhost != NULL) {
 		nsoption_set_int(max_fetchers_per_host, prefs_popup_get(pw->pp_perhost, &s_popup_perhost, nsoption_int(max_fetchers_per_host)));
 	}
+
+	/* Notifications */
+	{
+		macos9_notify_settings notify;
+		prefs_notify_from_ui(pw, &notify);
+		macos9_notify_settings_to_options(&notify);
+		if (pw->ck_service != NULL) {
+			nsoption_set_bool(notify_use_service, GetControlValue(pw->ck_service) != 0);
+		}
+	}
 }
 
 /* Populate UI controls from live options */
@@ -846,6 +974,13 @@ static void prefs_load_values(struct prefs_win *pw)
 	prefs_popup_set_item(pw->pp_fetch,   pw->m_fetch,   prefs_popup_item(&s_popup_fetch, nsoption_int(max_fetchers)));
 	prefs_popup_set_item(pw->pp_perhost, pw->m_perhost, prefs_popup_item(&s_popup_perhost, nsoption_int(max_fetchers_per_host)));
 
+	/* Notifications */
+	{
+		macos9_notify_settings notify;
+		macos9_notify_settings_from_options(&notify);
+		prefs_notify_to_ui(pw, &notify, nsoption_bool(notify_use_service));
+	}
+
 	if (pw->tabs != NULL)
 		SetControlValue(pw->tabs, (short)(pw->cat + 1));
 }
@@ -884,6 +1019,12 @@ static void prefs_load_defaults_into_ui(struct prefs_win *pw)
 
 	prefs_popup_set_item(pw->pp_fetch,   pw->m_fetch,   prefs_popup_item(&s_popup_fetch, 128));
 	prefs_popup_set_item(pw->pp_perhost, pw->m_perhost, prefs_popup_item(&s_popup_perhost, 16));
+
+	{
+		macos9_notify_settings notify;
+		macos9_notify_settings_defaults(&notify);
+		prefs_notify_to_ui(pw, &notify, 1);
+	}
 }
 
 static void prefs_set_home_from_current(struct prefs_win *pw)
@@ -909,6 +1050,64 @@ static void prefs_set_home_default(struct prefs_win *pw)
 		TESetSelect(0, 32767, pw->te_home);
 		InvalWindowRect(pw->win, &s_te_home_rect);
 	}
+}
+
+static void prefs_draw_cstr(short h, short v, const char *text)
+{
+	MoveTo(h, v);
+	DrawText(text, 0, (short)strlen(text));
+}
+
+static void prefs_popup_label(ControlRef c, const struct prefs_popup_def *def, const Rect *r)
+{
+	int idx;
+	if (c == NULL) return;
+	idx = GetControlValue(c) - 1;
+	if (idx < 0 || idx >= def->count) return;
+	prefs_draw_cstr((short)(r->left + 8), (short)(r->top + 15), def->labels[idx]);
+}
+
+static void prefs_paint_notify(struct prefs_win *pw)
+{
+	RGBColor black_c;
+	RGBColor gray_c;
+	int i;
+
+	black_c.red = black_c.green = black_c.blue = 0;
+	gray_c.red = gray_c.green = gray_c.blue = 0x5555;
+	RGBForeColor(&black_c);
+	TextFont(1); TextFace(normal); TextSize(12);
+	prefs_draw_cstr((short)(s_ck_service_ctrl_rect.left + 22), (short)(s_ck_service_ctrl_rect.top + 14),
+		"Send notifications through Lotus Notify when it is installed");
+	TextFace(bold);
+	prefs_draw_cstr(24, 126, "Notify me about:");
+	TextFace(normal);
+	for (i = 0; i < PREFS_NOTIFY_CATEGORIES; i++) {
+		prefs_draw_cstr((short)(s_ck_cat_ctrl_rect[i].left + 22), (short)(s_ck_cat_ctrl_rect[i].top + 14),
+			s_notify_category_labels[i]);
+	}
+	prefs_draw_cstr(24, (short)(s_pp_position_rect.top + 15), "Position:");
+	prefs_draw_cstr(276, (short)(s_pp_duration_rect.top + 15), "Banner stays:");
+	for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
+		prefs_draw_cstr((short)(i % 2 == 0 ? 24 : 244), (short)(s_pp_style_rect[i].top + 15),
+			s_notify_style_labels[i]);
+	}
+	prefs_draw_cstr((short)(s_ck_sound_ctrl_rect.left + 22), (short)(s_ck_sound_ctrl_rect.top + 14),
+		"Play a sound");
+
+	prefs_popup_label(pw->pp_position, &s_popup_position, &s_pp_position_rect);
+	prefs_popup_label(pw->pp_duration, &s_popup_duration, &s_pp_duration_rect);
+	for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
+		prefs_popup_label(pw->pp_style[i], &s_popup_style, &s_pp_style_rect[i]);
+	}
+
+	RGBForeColor(&gray_c);
+	TextFont(3); TextSize(9);
+	prefs_draw_cstr(24, 300, "Questions always appear as a pop-up box and are never silenced.");
+	prefs_draw_cstr((short)(s_btn_examples_rect.right + 10), (short)(s_btn_examples_rect.top + 16),
+		"Shows each kind with the settings above.");
+	TextFont(1); TextSize(12);
+	RGBForeColor(&black_c);
 }
 
 static void prefs_paint(struct prefs_win *pw)
@@ -1075,6 +1274,10 @@ static void prefs_paint(struct prefs_win *pw)
 		DrawString("\p32 MB (allocated from application partition)");
 		break;
 
+	case PREFS_CAT_NOTIFY:
+		prefs_paint_notify(pw);
+		break;
+
 	default:
 		break;
 	}
@@ -1196,6 +1399,45 @@ static void prefs_te_tab(struct prefs_win *pw)
 	pw->active_te = next;
 	TEActivate(next);
 	TESetSelect(0, 32767, next);
+}
+
+/* Returns 1 when the click was on a Notifications panel control. */
+static int prefs_click_notify(struct prefs_win *pw, Point lp)
+{
+	macos9_notify_settings settings;
+	int i;
+
+	if (PtInRect(lp, &s_ck_service_row_rect)) {
+		prefs_check_toggle(pw->ck_service, lp, &s_ck_service_ctrl_rect); return 1;
+	}
+	for (i = 0; i < PREFS_NOTIFY_CATEGORIES; i++) {
+		if (PtInRect(lp, &s_ck_cat_row_rect[i])) {
+			prefs_check_toggle(pw->ck_cat[i], lp, &s_ck_cat_ctrl_rect[i]); return 1;
+		}
+	}
+	if (PtInRect(lp, &s_pp_position_rect)) {
+		prefs_do_popup(pw->pp_position, pw->m_position, lp); return 1;
+	}
+	if (PtInRect(lp, &s_pp_duration_rect)) {
+		prefs_do_popup(pw->pp_duration, pw->m_duration, lp); return 1;
+	}
+	for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
+		if (PtInRect(lp, &s_pp_style_rect[i])) {
+			prefs_do_popup(pw->pp_style[i], pw->m_style[i], lp); return 1;
+		}
+	}
+	if (PtInRect(lp, &s_ck_sound_row_rect)) {
+		prefs_check_toggle(pw->ck_sound, lp, &s_ck_sound_ctrl_rect); return 1;
+	}
+	if (PtInRect(lp, &s_btn_examples_rect)) {
+		if (TrackControl(pw->btn_examples, lp, NULL) != 0) {
+			prefs_notify_from_ui(pw, &settings);
+			macos9_notify_show_examples(&settings);
+			SetPortWindowPort(pw->win);
+		}
+		return 1;
+	}
+	return 0;
 }
 
 static int prefs_click(struct prefs_win *pw, Point lp)
@@ -1330,6 +1572,10 @@ static int prefs_click(struct prefs_win *pw, Point lp)
 		}
 		break;
 
+	case PREFS_CAT_NOTIFY:
+		if (prefs_click_notify(pw, lp)) return 0;
+		break;
+
 	default:
 		break;
 	}
@@ -1462,6 +1708,31 @@ void macos9_prefs_show(void)
 	pw.pp_perhost = prefs_create_popup(pw.win, &s_pp_perhost_rect, pw.m_perhost,
 		s_popup_perhost.count, prefs_popup_item(&s_popup_perhost, nsoption_int(max_fetchers_per_host)));
 
+	/* Notifications panel */
+	{
+		macos9_notify_settings notify;
+		int i;
+		macos9_notify_settings_from_options(&notify);
+		pw.ck_service = prefs_create_checkbox(pw.win, &s_ck_service_ctrl_rect, "",
+			nsoption_bool(notify_use_service));
+		for (i = 0; i < PREFS_NOTIFY_CATEGORIES; i++) {
+			pw.ck_cat[i] = prefs_create_checkbox(pw.win, &s_ck_cat_ctrl_rect[i], "", notify.category_on[i]);
+		}
+		pw.m_position = prefs_popup_menu(&s_popup_position, PREFS_MENU_ID_POSITION);
+		pw.pp_position = prefs_create_popup(pw.win, &s_pp_position_rect, pw.m_position,
+			s_popup_position.count, prefs_popup_item(&s_popup_position, notify.position));
+		pw.m_duration = prefs_popup_menu(&s_popup_duration, PREFS_MENU_ID_DURATION);
+		pw.pp_duration = prefs_create_popup(pw.win, &s_pp_duration_rect, pw.m_duration,
+			s_popup_duration.count, prefs_popup_item(&s_popup_duration, notify.banner_seconds));
+		for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
+			pw.m_style[i] = prefs_popup_menu(&s_popup_style, (short)(PREFS_MENU_ID_STYLE + i));
+			pw.pp_style[i] = prefs_create_popup(pw.win, &s_pp_style_rect[i], pw.m_style[i],
+				s_popup_style.count, prefs_popup_item(&s_popup_style, notify.style[s_notify_style_types[i]]));
+		}
+		pw.ck_sound = prefs_create_checkbox(pw.win, &s_ck_sound_ctrl_rect, "", notify.sound);
+		pw.btn_examples = prefs_create_button(pw.win, &s_btn_examples_rect, "Show Examples");
+	}
+
 	/* TextEdit fields for General panel */
 	{
 		Rect r = s_te_home_rect;
@@ -1501,7 +1772,13 @@ void macos9_prefs_show(void)
 			short part;
 			Point lp;
 			part = FindWindow(ev.where, &which);
-			if (which != pw.win) break;
+			if (which != pw.win) {
+				if (macos9_notify_owns(which)) {
+					macos9_notify_click(which, part, ev.where);
+					SetPortWindowPort(pw.win);
+				}
+				break;
+			}
 			if (part == inDrag) {
 				Rect db;
 				BitMap sb;
@@ -1553,6 +1830,8 @@ void macos9_prefs_show(void)
 			break;
 		case nullEvent:
 			if (pw.active_te != NULL) TEIdle(pw.active_te);
+			macos9_notify_idle();
+			SetPortWindowPort(pw.win);
 			break;
 		case kHighLevelEvent:
 			AEProcessAppleEvent(&ev);
@@ -1586,12 +1865,28 @@ void macos9_prefs_show(void)
 	prefs_disp_ctrl(pw.btn_hist);
 	prefs_disp_ctrl(pw.pp_fetch);
 	prefs_disp_ctrl(pw.pp_perhost);
+	{
+		int i;
+		prefs_disp_ctrl(pw.ck_service);
+		for (i = 0; i < PREFS_NOTIFY_CATEGORIES; i++) prefs_disp_ctrl(pw.ck_cat[i]);
+		prefs_disp_ctrl(pw.pp_position);
+		prefs_disp_ctrl(pw.pp_duration);
+		for (i = 0; i < PREFS_NOTIFY_STYLES; i++) prefs_disp_ctrl(pw.pp_style[i]);
+		prefs_disp_ctrl(pw.ck_sound);
+		prefs_disp_ctrl(pw.btn_examples);
+	}
 
 	/* Dispose menus */
 	prefs_disp_menu(pw.m_font);
 	prefs_disp_menu(pw.m_minfont);
 	prefs_disp_menu(pw.m_fetch);
 	prefs_disp_menu(pw.m_perhost);
+	{
+		int i;
+		prefs_disp_menu(pw.m_position);
+		prefs_disp_menu(pw.m_duration);
+		for (i = 0; i < PREFS_NOTIFY_STYLES; i++) prefs_disp_menu(pw.m_style[i]);
+	}
 
 	/* Dispose TextEdit handles */
 	if (pw.te_home != NULL) TEDispose(pw.te_home);

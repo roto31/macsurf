@@ -60,8 +60,18 @@ hardware; no binary has been published.
 - Preferences: a Notifications tab (position, banner duration, style per notice type, sound, the
   downloads/proxy/security/housekeeping switches) with a Show Examples button. Settings are
   stored as `notify_*` options in `desktop/options.h`.
+- Notices for finished downloads (with a Show in Finder button) and failed downloads; for the
+  proxy stopping or answering again; for cache cleared and bookmarks imported or exported; and,
+  once per session, "Check this Mac's clock" with an Open Date & Time button when a secure site
+  fails on dates and the clock reads a year earlier than the build.
 
 ### Changed
+
+- Page `alert()` / `confirm()`, the delete confirmation, cache and bookmark messages and the About
+  fallback use Lotus Notify instead of `StandardAlert`. Page dialogs are titled "*host* says:",
+  show long text in full and offer "Stop dialogs from this page" from the second dialog (a stopped
+  `confirm()` returns `false`). `StandardAlert` remains only in `macos9_notify_emergency_alert`
+  (out of memory, About fallback).
 
 - Keyboard, menu and window routing use `FrontNonFloatingWindow()` instead of `FrontWindow()`
   (in `main.c`, `macos9_font.c`, `macos9_download.c` and `macsurf_debug.c`) so a visible banner
@@ -103,6 +113,10 @@ hardware; no binary has been published.
 
 ### Security
 
+- The HTTPS proxy consent question has a "Remember for this proxy" checkbox, ticked by default;
+  unticked, consent lasts until the browser quits and nothing is saved.
+- A question that cannot be shown answers "no" (`macos9_notify_ask` returns −1) instead of the
+  default button.
 - The plain-HTTP "Send Debug Log" upload is compiled out. The menu item stays disabled unless a
   build defines an HTTPS `LOTUS_DEBUG_LOG_UPLOAD_URL`.
 - Removed distrusted or expired roots: Atos TrustedRoot 2011, Entrust Root CA, SecureSign Root CA12,

@@ -1,5 +1,5 @@
 /*
- * Lotus Navigator built-in notifications (Lotus Notify phase N2).
+ * Lotus Navigator built-in notifications (Lotus Notify phases N2 and N3).
  * See macos9_notify.h.
  *
  * C89 / CW8-clean: no inline, no // comments, declarations at top of block.
@@ -16,6 +16,8 @@
 #include "macsurf_debug.h"
 #include "lotus_theme.h"
 #include "macos9_notify.h"
+#include "macos9_proxy.h"
+#include "macsurf_osver.h"
 
 static int notify_clamp(int value, int low, int high, int fallback)
 {
@@ -86,6 +88,10 @@ typedef struct {
 	long          seq;
 	WindowRef     win;
 	ControlRef    ok_button;
+	ControlRef    action_button;
+	int           has_file;
+	int           file_action;
+	FSSpec        file;
 	int           type;
 	int           style;
 	int           position;
@@ -114,6 +120,9 @@ static int s_limiter_ready = 0;
 static long s_example_progress_id = 0;
 static int s_example_progress = 0;
 static unsigned long s_example_next_tick = 0;
+
+static int s_proxy_seen = MACOS9_PROXY_UNCONFIGURED;
+static long s_proxy_notice_id = 0;
 
 static void notify_pstring(const char *src, unsigned char *dest)
 {
@@ -395,6 +404,7 @@ static void notify_paint(notify_slot *s)
 	TextFont(0);
 	TextSize(0);
 	if (s->ok_button != NULL) Draw1Control(s->ok_button);
+	if (s->action_button != NULL) Draw1Control(s->action_button);
 }
 
 void macos9_notify_draw(WindowRef win)
@@ -422,6 +432,17 @@ static void notify_open_url(const char *url)
 	nsurl_unref(target);
 }
 
+static void notify_run_action(notify_slot *s)
+{
+	if (!s->has_file) {
+		notify_open_url(s->url);
+	} else if (s->file_action == MACOS9_NOTIFY_FILE_OPEN) {
+		macos9_finder_open_file(&s->file);
+	} else {
+		macos9_finder_reveal_file(&s->file);
+	}
+}
+
 void macos9_notify_click(WindowRef win, short part, Point where)
 {
 	notify_slot *s = notify_find_window(win);
@@ -446,9 +467,12 @@ void macos9_notify_click(WindowRef win, short part, Point where)
 		GlobalToLocal(&local);
 		if (s->ok_button != NULL) {
 			FindControl(local, win, &hit);
-			if (hit == s->ok_button && TrackControl(hit, local, NULL) != 0) notify_dismiss(s);
+			if (hit != NULL && TrackControl(hit, local, NULL) != 0) {
+				if (hit == s->action_button) notify_run_action(s);
+				if (hit == s->action_button || hit == s->ok_button) notify_dismiss(s);
+			}
 		} else {
-			notify_open_url(s->url);
+			notify_run_action(s);
 			notify_dismiss(s);
 		}
 		SetPort(saved);
@@ -516,7 +540,28 @@ static void notify_size(notify_slot *s)
 	TextSize(0);
 }
 
-static long notify_post_unguarded(const macos9_notify_settings *settings, const ln_notice *notice)
+static void notify_add_action_button(notify_slot *s, const char *label_utf8)
+{
+	char roman[LN_MAX_BUTTON * 2];
+	unsigned char label[LN_MAX_BUTTON * 2];
+	Rect ok;
+	Rect r;
+	short w;
+
+	if (s->ok_button == NULL || label_utf8 == NULL) return;
+	notify_to_roman(label_utf8, roman, sizeof roman);
+	TextFont(0);
+	TextSize(0);
+	w = (short)(TextWidth(roman, 0, (short)strlen(roman)) + 24);
+	if (w < NOTIFY_BUTTON_MIN_W) w = NOTIFY_BUTTON_MIN_W;
+	GetControlBounds(s->ok_button, &ok);
+	SetRect(&r, (short)(ok.left - 12 - w), ok.top, (short)(ok.left - 12), ok.bottom);
+	notify_pstring(roman, label);
+	s->action_button = NewControl(s->win, &r, label, true, 0, 0, 0, kControlPushButtonProc, 0);
+}
+
+static long notify_post_unguarded(const macos9_notify_settings *settings, const ln_notice *notice,
+		const FSSpec *file, int file_action, const char *action_label)
 {
 	ln_result result;
 	notify_slot *s;
@@ -563,6 +608,11 @@ static long notify_post_unguarded(const macos9_notify_settings *settings, const 
 	notify_copy(s->url, notice->open_url, sizeof s->url);
 	notify_to_roman(notice->title, s->title, sizeof s->title);
 	notify_to_roman(notice->message, s->message, sizeof s->message);
+	if (file != NULL) {
+		s->has_file = 1;
+		s->file = *file;
+		s->file_action = file_action;
+	}
 
 	SetRect(&bounds, 0, 0, s->width, 60);
 	if (CreateNewWindow(kFloatingWindowClass, kWindowCloseBoxAttribute, &bounds, &s->win) != noErr ||
@@ -591,21 +641,28 @@ static long notify_post_unguarded(const macos9_notify_settings *settings, const 
 			SetControlData(s->ok_button, kControlEntireControl, kControlPushButtonDefaultTag,
 				sizeof is_default, (Ptr)&is_default);
 		}
+		if (s->has_file) notify_add_action_button(s, action_label);
 	}
 	notify_layout();
 	return s->id;
 }
 
 /* Posting sizes text in the notice's window, so the caller's port is kept. */
-static long notify_post_with(const macos9_notify_settings *settings, const ln_notice *notice)
+static long notify_post_file_with(const macos9_notify_settings *settings, const ln_notice *notice,
+		const FSSpec *file, int file_action, const char *action_label)
 {
 	GrafPtr saved;
 	long id;
 
 	GetPort(&saved);
-	id = notify_post_unguarded(settings, notice);
+	id = notify_post_unguarded(settings, notice, file, file_action, action_label);
 	SetPort(saved);
 	return id;
+}
+
+static long notify_post_with(const macos9_notify_settings *settings, const ln_notice *notice)
+{
+	return notify_post_file_with(settings, notice, NULL, 0, NULL);
 }
 
 void macos9_notify_post(const ln_notice *notice, long *id_out)
@@ -616,6 +673,74 @@ void macos9_notify_post(const ln_notice *notice, long *id_out)
 	macos9_notify_settings_from_options(&settings);
 	id = notify_post_with(&settings, notice);
 	if (id_out != NULL) *id_out = id;
+}
+
+void macos9_notify_post_file(const ln_notice *notice, const FSSpec *file, int action,
+                             const char *action_label, long *id_out)
+{
+	macos9_notify_settings settings;
+	long id;
+
+	macos9_notify_settings_from_options(&settings);
+	id = notify_post_file_with(&settings, notice, file, action, action_label);
+	if (id_out != NULL) *id_out = id;
+}
+
+void macos9_notify_emergency_alert(const char *title, const char *body, int stop)
+{
+	Str255 ptitle;
+	Str255 pbody;
+	short item;
+
+	notify_pstring(title != NULL ? title : "", ptitle);
+	notify_pstring(body != NULL ? body : "", pbody);
+	if (stop) SysBeep(30);
+	StandardAlert(stop ? kAlertStopAlert : kAlertNoteAlert, ptitle, pbody, NULL, &item);
+}
+
+#define NOTIFY_SYSTEM_DOMAIN      (-32766)   /* kSystemDomain */
+#define NOTIFY_PREF_PANES_FOLDER  'ppan'     /* kPreferencePanesFolderType */
+
+/* The Date & Time control panel (Mac OS 9) or preference pane (Mac OS X). */
+static int notify_date_time_item(FSSpec *out)
+{
+	short vref;
+	long dir_id;
+
+	if (macsurf_os_is_osx()) {
+		if (FindFolder(NOTIFY_SYSTEM_DOMAIN, NOTIFY_PREF_PANES_FOLDER, kDontCreateFolder, &vref, &dir_id) != noErr)
+			return 0;
+		return FSMakeFSSpec(vref, dir_id, "\pDateAndTime.prefPane", out) == noErr;
+	}
+	if (FindFolder(kOnSystemDisk, kControlPanelFolderType, kDontCreateFolder, &vref, &dir_id) != noErr) return 0;
+	return FSMakeFSSpec(vref, dir_id, "\pDate & Time", out) == noErr;
+}
+
+/* A correct clock never reads earlier than the build, so unlike an expiry
+ * guess this test does not go stale as the binary ages. */
+void macos9_notify_clock_check(const char *believed_date)
+{
+	static int s_clock_notice_shown = 0;
+	char message[LN_MAX_MESSAGE];
+	ln_notice notice;
+	FSSpec panel;
+
+	if (s_clock_notice_shown || believed_date == NULL || believed_date[0] == '\0') return;
+	if (!macos9_notify_clock_suspect(atol(believed_date), macos9_notify_year_from_date(__DATE__))) return;
+	s_clock_notice_shown = 1;
+	memset(&notice, 0, sizeof notice);
+	notice.type = LN_TYPE_ERROR;
+	notice.category = "security";
+	notice.title = "Check this Mac's clock";
+	sprintf(message, "The clock reads %.16s, so secure sites refuse to load. "
+		"Set the date and time, then reload the page.", believed_date);
+	notice.message = message;
+	notice.play_sound = 1;
+	if (notify_date_time_item(&panel)) {
+		macos9_notify_post_file(&notice, &panel, MACOS9_NOTIFY_FILE_OPEN, "Open Date & Time", NULL);
+	} else {
+		macos9_notify_post(&notice, NULL);
+	}
 }
 
 void macos9_notify_update(long id, int percent, const char *message)
@@ -660,12 +785,38 @@ static void notify_example_progress_tick(void)
 	if (s_example_progress >= 100) s_example_progress_id = 0;
 }
 
+static void notify_proxy_tick(void)
+{
+	char message[LN_MAX_MESSAGE];
+	ln_notice notice;
+	int change = macos9_notify_proxy_change(&s_proxy_seen, macos9_proxy_state());
+
+	if (change == MACOS9_NOTIFY_PROXY_QUIET) return;
+	memset(&notice, 0, sizeof notice);
+	notice.category = "proxy";
+	notice.message = message;
+	notice.play_sound = 1;
+	if (change == MACOS9_NOTIFY_PROXY_STOPPED) {
+		notice.type = LN_TYPE_WARNING;
+		notice.title = "Proxy stopped answering";
+		sprintf(message, "%.100s did not answer, so pages load directly until it comes back.",
+			macos9_proxy_target());
+	} else {
+		notice.type = LN_TYPE_INFO;
+		notice.title = "Proxy answering again";
+		sprintf(message, "Pages load through %.100s again.", macos9_proxy_target());
+	}
+	macos9_notify_withdraw(s_proxy_notice_id);
+	macos9_notify_post(&notice, &s_proxy_notice_id);
+}
+
 void macos9_notify_idle(void)
 {
 	unsigned long now = TickCount();
 	int i;
 
 	notify_example_progress_tick();
+	notify_proxy_tick();
 	for (i = 0; i < NOTIFY_SLOTS; i++) {
 		notify_slot *s = &s_slots[i];
 		if (s->used && s->shown && s->expires != 0 && now >= s->expires) notify_dismiss(s);
@@ -868,7 +1019,7 @@ static int notify_ask_with(const macos9_notify_settings *settings, macos9_dialog
 	notify_to_roman(dialog->title, d.title, sizeof d.title);
 	utf8_length = dialog->message != NULL ? strlen(dialog->message) : 0;
 	d.message = (char *)malloc(utf8_length * 2 + 1);
-	if (d.message == NULL) return 0;
+	if (d.message == NULL) return -1;
 	notify_to_roman(dialog->message, d.message, utf8_length * 2 + 1);
 	d.message_length = (long)strlen(d.message);
 	d.icon = notify_icon_kind(dialog->icon, LN_TYPE_QUESTION);
@@ -879,7 +1030,7 @@ static int notify_ask_with(const macos9_notify_settings *settings, macos9_dialog
 	if (CreateNewWindow(kMovableModalWindowClass, kWindowNoAttributes, &bounds, &d.win) != noErr ||
 	    d.win == NULL) {
 		free(d.message);
-		return 0;
+		return -1;
 	}
 	GetPort(&saved);
 	SetPortWindowPort(d.win);
@@ -903,7 +1054,7 @@ static int notify_ask_with(const macos9_notify_settings *settings, macos9_dialog
 		DisposeWindow(d.win);
 		free(d.message);
 		SetPort(saved);
-		return 0;
+		return -1;
 	}
 
 	macos9_notify_place_alert(&usable, d.width, d.height + notify_frame_top(d.win), &placed);
@@ -1038,7 +1189,7 @@ void macos9_notify_withdraw(long id)
 int macos9_notify_ask(macos9_dialog *dialog)
 {
 	(void)dialog;
-	return 0;
+	return -1;
 }
 
 void macos9_notify_show_examples(const macos9_notify_settings *settings)
@@ -1048,6 +1199,18 @@ void macos9_notify_show_examples(const macos9_notify_settings *settings)
 
 void macos9_notify_idle(void)
 {
+}
+
+void macos9_notify_emergency_alert(const char *title, const char *body, int stop)
+{
+	(void)title;
+	(void)body;
+	(void)stop;
+}
+
+void macos9_notify_clock_check(const char *believed_date)
+{
+	(void)believed_date;
 }
 
 #endif /* __MACOS9__ */

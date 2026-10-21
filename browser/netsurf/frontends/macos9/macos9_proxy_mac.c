@@ -399,18 +399,19 @@ static void proxy_ask_https_consent(void)
 {
 	char question[160];
 	int yes;
+	int remember = 1;
 
 	sprintf(question, "Use the proxy at %s for secure sites too?",
 		macos9_proxy_target());
-	yes = macos9_chrome_ask(question,
+	yes = macos9_chrome_ask_with_checkbox(question,
 		"Secure pages load much faster this way. Traffic between this "
 		"Mac and the proxy is not encrypted, so only allow it on a "
 		"network you trust. You can change this in the View menu.",
-		"Use Proxy", "Don't Use");
+		"Use Proxy", "Don't Use", "Remember for this proxy", &remember);
 	macos9_proxy_set_https_consent(yes);
-	proxy_store_consent();
-	macsurf_debug_log_writef("LIFE proxy https consent=%d target=%s",
-		yes, macos9_proxy_target());
+	if (remember) proxy_store_consent();
+	macsurf_debug_log_writef("LIFE proxy https consent=%d remember=%d target=%s",
+		yes, remember, macos9_proxy_target());
 }
 
 static void proxy_set_server(void)

@@ -44,6 +44,7 @@
 #include "ostls_async.h"
 #include "ostls_http.h"
 #include "macos9_disk_cache.h"
+#include "macos9_notify.h"
 
 #define MAX_HTTPS_F        128  /* macTLS#196: bumped to 128 for GitHub (65+ in-flight)
                                  * fixes241: was 32; image-heavy pages
@@ -1545,6 +1546,7 @@ static void hctx_fail(struct macos9_https_ctx *c, const char *why)
 			macsurf_debug_log_writef(
 				"https: clock INVALID date=%s host=%s", clk,
 				c->host[0] ? c->host : "(unset)");
+			macos9_notify_clock_check(clk);
 		} else {
 			macsurf_debug_log_writef(
 				"https: FAIL time-helper reported clock-bad but "
@@ -1602,6 +1604,7 @@ static void hctx_fail(struct macos9_https_ctx *c, const char *why)
 				"certificate expired or not yet valid; this Mac's "
 				"date reads %s",
 				believed[0] ? believed : "(unreadable)");
+			macos9_notify_clock_check(believed);
 		} else {
 			sprintf(cert_why,
 				"certificate rejected (%s); this Mac's date reads %s",

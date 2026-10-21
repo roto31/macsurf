@@ -59,4 +59,29 @@ int macos9_notify_place(const macos9_notify_rect *usable, int position, int widt
 void macos9_notify_place_alert(const macos9_notify_rect *usable, int width, int height,
                                macos9_notify_rect *out);
 
+/* A page's alert() and confirm() offer "Stop dialogs from this page" from
+ * this dialog on. */
+#define MACOS9_NOTIFY_PAGE_STOP_FROM 2
+
+int macos9_notify_page_offers_stop(int dialogs_on_page);
+
+/* Year from a compiler __DATE__ string ("Oct 21 2026"); 0 when malformed. */
+long macos9_notify_year_from_date(const char *compiler_date);
+
+/* A certificate date failure points at the computer's clock when the clock
+ * believes it is earlier than the year this browser was built. */
+int macos9_notify_clock_suspect(long believed_year, long build_year);
+
+enum {
+	MACOS9_NOTIFY_PROXY_QUIET,
+	MACOS9_NOTIFY_PROXY_STOPPED,
+	MACOS9_NOTIFY_PROXY_BACK
+};
+
+/* One notice per change of proxy reachability. *last_seen holds the last
+ * up/down state seen (start it at MACOS9_PROXY_UNCONFIGURED); state is the
+ * current macos9_proxy_state(). A first result of "down" is reported, a
+ * first "up" is not, and an unfinished probe changes nothing. */
+int macos9_notify_proxy_change(int *last_seen, int state);
+
 #endif

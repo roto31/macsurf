@@ -52,6 +52,7 @@
 
 #include "macos9.h"
 #include "macsurf_debug.h"
+#include "macos9_notify.h"
 
 #ifdef __MACOS9__
 #include <Files.h>
@@ -1338,6 +1339,31 @@ macos9_download_data(struct gui_download_window *dw,
 	return NSERROR_OK;
 }
 
+#ifdef __MACOS9__
+/* Lotus Notify: a finished download's notice shows the file in the Finder. */
+static void dl_notify(struct gui_download_window *dw, const char *failure)
+{
+	ln_notice notice;
+	char message[LN_MAX_MESSAGE];
+
+	memset(&notice, 0, sizeof notice);
+	notice.category = "downloads";
+	notice.message = message;
+	notice.play_sound = 1;
+	if (failure != NULL) {
+		notice.type = LN_TYPE_ERROR;
+		notice.title = "Download failed";
+		sprintf(message, "%.63s: %.160s", dw->filename, failure);
+		macos9_notify_post(&notice, NULL);
+	} else {
+		notice.type = LN_TYPE_INFO;
+		notice.title = "Download finished";
+		sprintf(message, "%.63s (%lu bytes) finished downloading.", dw->filename, dw->bytes_written);
+		macos9_notify_post_file(&notice, &dw->fsspec, MACOS9_NOTIFY_FILE_REVEAL, "Show in Finder", NULL);
+	}
+}
+#endif
+
 static void
 macos9_download_error(struct gui_download_window *dw,
 		      const char *error_msg)
@@ -1345,9 +1371,14 @@ macos9_download_error(struct gui_download_window *dw,
 #ifdef __MACOS9__
 	char status[160];
 	const char *m = (error_msg != NULL) ? error_msg : "download failed";
+	int cancelled;
 #endif
 
 	if (dw == NULL) return;
+#ifdef __MACOS9__
+	/* dl_cancel clears dl_ctx before its abort reports back here. */
+	cancelled = (dw->dl_ctx == NULL);
+#endif
 	dw->aborted = 1;
 	if (dw->dl_state == 0) dw->dl_state = 2;   /* keep 2 if already stopped */
 	dw->dl_ctx = NULL;                          /* core destroys ctx now */
@@ -1364,6 +1395,7 @@ macos9_download_error(struct gui_download_window *dw,
 	macsurf_debug_log_writef(
 		"download_error: file=%s msg=%s", dw->filename, m);
 	dl_mgr_progress();
+	if (!cancelled) dl_notify(dw, m);
 #else
 	(void)error_msg;
 #endif
@@ -1399,6 +1431,7 @@ macos9_download_done(struct gui_download_window *dw)
 		dw->filename, (long)dw->bytes_written,
 		(long)dw->total_length);
 	dl_mgr_progress();
+	dl_notify(dw, NULL);
 #endif
 	/* Node stays in the manager list (Done); freed by the LRU cap. */
 }

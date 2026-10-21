@@ -34,11 +34,31 @@
 #include "about_logo_data.h"   /* fixes726 - crisp 64x64 app emblem PNG */
 #include "manager_icons_data.h" /* fixes745 - History/Bookmark banner icons */
 #include "lotus_theme.h"
+#include "macos9_notify.h"
 
 #ifdef __MACOS9__
 #include <Carbon.h>
 #include <Movies.h>
 #include <QuickTimeComponents.h>
+
+/* A Housekeeping notice. With file, the notice shows it in the Finder. */
+static void chrome_housekeeping_notice(ln_type type, const char *title, const char *message,
+		const FSSpec *file)
+{
+	ln_notice notice;
+
+	memset(&notice, 0, sizeof notice);
+	notice.type = type;
+	notice.category = "housekeeping";
+	notice.title = title;
+	notice.message = message;
+	notice.play_sound = 1;
+	if (file != NULL) {
+		macos9_notify_post_file(&notice, file, MACOS9_NOTIFY_FILE_REVEAL, "Show in Finder", NULL);
+	} else {
+		macos9_notify_post(&notice, NULL);
+	}
+}
 #endif
 
 extern struct browser_window *macos9_gw_bw(struct gui_window *g);
@@ -1521,15 +1541,12 @@ void macos9_cache_clear_ui(void)
 	extern long macos9_cache_clear(void);
 	extern void macos9_https_forget_all(void);
 	long n;
-	Str255 msg;
 	char buf[80];
-	short item;
 	n = macos9_cache_clear();
 	macos9_https_forget_all();
 	sprintf(buf, "Cleared %ld cached file%s from disk.",
 		n, (n == 1) ? "" : "s");
-	c_to_pstring(buf, msg);
-	StandardAlert(kAlertNoteAlert, msg, "\p", NULL, &item);
+	chrome_housekeeping_notice(LN_TYPE_INFO, "Cache cleared", buf, NULL);
 #else
 	extern long macos9_cache_clear(void);
 	(void)macos9_cache_clear();
@@ -2791,51 +2808,51 @@ static int chrome_prompt_text2(const char *title, const char *init_name,
 	return accepted && out_name[0] != '\0';
 }
 
-/* Caution alert with Delete / Cancel. Returns 1 if the user confirms. */
+/* Caution question with Delete / Cancel. Returns 1 if the user confirms. */
 int macos9_chrome_confirm_delete(const char *msg)
 {
-	Str255 p;
-	SInt16 item = 0;
-	AlertStdAlertParamRec par;
-	c_to_pstring(msg, p);
-	par.movable = false;
-	par.helpButton = false;
-	par.filterProc = NULL;
-	par.defaultText = (StringPtr)"\pDelete";
-	par.cancelText = (StringPtr)"\pCancel";
-	par.otherText = NULL;
-	par.defaultButton = kAlertStdAlertOKButton;
-	par.cancelButton = kAlertStdAlertCancelButton;
-	par.position = kWindowDefaultPosition;
-	StandardAlert(kAlertCautionAlert, p, "\p", &par, &item);
-	return item == kAlertStdAlertOKButton;
+	macos9_dialog dialog;
+
+	memset(&dialog, 0, sizeof dialog);
+	dialog.title = msg;
+	dialog.message = "";
+	dialog.icon = LN_ICON_CAUTION;
+	dialog.buttons[0] = "Delete";
+	dialog.buttons[1] = "Cancel";
+	dialog.play_sound = 1;
+	return macos9_notify_ask(&dialog) == 0;
 }
 
-/* Note alert with caller-labelled buttons. Returns 1 for yes_label. */
+/* Note question with caller-labelled buttons and an optional checkbox
+ * (checkbox NULL for none; *checked is its value in and out). Returns 1 for
+ * yes_label. */
+int macos9_chrome_ask_with_checkbox(const char *msg, const char *detail,
+	const char *yes_label, const char *no_label,
+	const char *checkbox, int *checked)
+{
+	macos9_dialog dialog;
+	int answer;
+
+	memset(&dialog, 0, sizeof dialog);
+	dialog.title = msg;
+	dialog.message = detail;
+	dialog.icon = LN_ICON_NOTE;
+	dialog.buttons[0] = yes_label;
+	dialog.buttons[1] = no_label;
+	dialog.checkbox = checkbox;
+	dialog.checkbox_value = (checked != NULL && *checked) ? 1 : 0;
+	/* The proxy consent question opens on its own once the proxy answers,
+	 * so it has to be heard as well as seen. */
+	dialog.play_sound = 1;
+	answer = macos9_notify_ask(&dialog);
+	if (checked != NULL) *checked = dialog.checkbox_value;
+	return answer == 0;
+}
+
 int macos9_chrome_ask(const char *msg, const char *detail,
 	const char *yes_label, const char *no_label)
 {
-	Str255 p, d, yes, no;
-	SInt16 item = 0;
-	AlertStdAlertParamRec par;
-	c_to_pstring(msg, p);
-	c_to_pstring(detail, d);
-	c_to_pstring(yes_label, yes);
-	c_to_pstring(no_label, no);
-	par.movable = false;
-	par.helpButton = false;
-	par.filterProc = NULL;
-	par.defaultText = yes;
-	par.cancelText = no;
-	par.otherText = NULL;
-	par.defaultButton = kAlertStdAlertOKButton;
-	par.cancelButton = kAlertStdAlertCancelButton;
-	par.position = kWindowDefaultPosition;
-	/* The proxy consent question opens on its own once the proxy answers,
-	 * so it has to be heard as well as seen. */
-	SysBeep(30);
-	StandardAlert(kAlertNoteAlert, p, d, &par, &item);
-	return item == kAlertStdAlertOKButton;
+	return macos9_chrome_ask_with_checkbox(msg, detail, yes_label, no_label, NULL, NULL);
 }
 
 int macos9_chrome_prompt_line(const char *title, const char *initial,
@@ -3100,7 +3117,6 @@ static void bw_import_bookmarks(void)
 	char *data;
 	long len;
 	int added;
-	Str255 pmsg;
 	char msg[240];
 
 	if (NavGetDefaultDialogOptions(&opts) != noErr) return;
@@ -3127,11 +3143,7 @@ static void bw_import_bookmarks(void)
 	DisposePtr(data);
 	sprintf(msg, "Imported %d bookmark%s.", added,
 		(added == 1) ? "" : "s");
-	c_to_pstring(msg, pmsg);
-	{
-		SInt16 item;
-		StandardAlert(kAlertNoteAlert, pmsg, "\p", NULL, &item);
-	}
+	chrome_housekeeping_notice(LN_TYPE_INFO, "Bookmarks imported", msg, NULL);
 }
 
 /* Export Bookmarks... - write the store in the on-disk TAB grammar to
@@ -3145,15 +3157,12 @@ static void bw_export_bookmarks(void)
 	short vRef;
 	long dirID;
 	Str255 name;
-	Str255 pmsg;
 	char msg[240];
-	SInt16 item;
 	OSErr err;
 
 	data = macsurf_bookmarks_serialize(&len);
 	if (data == NULL) {
-		c_to_pstring("No bookmarks to export.", pmsg);
-		StandardAlert(kAlertNoteAlert, pmsg, "\p", NULL, &item);
+		chrome_housekeeping_notice(LN_TYPE_INFO, "Nothing to export", "There are no bookmarks to export.", NULL);
 		return;
 	}
 	if (macos9_data_dir_get(NULL, &vRef, &dirID) != noErr) {
@@ -3169,28 +3178,16 @@ static void bw_export_bookmarks(void)
 		err = chrome_fsspec_write_all(vRef, dirID, name, data, len);
 		free(data);
 		if (err != noErr) {
-			c_to_pstring("Could not write the export file.", pmsg);
-			StandardAlert(kAlertNoteAlert, pmsg, "\p", NULL, &item);
+			chrome_housekeeping_notice(LN_TYPE_ERROR, "Bookmarks not exported",
+				"Could not write the export file.", NULL);
 			return;
 		}
 		{
 			FSSpec spec;
-			char path[1024];
-			size_t pl;
-			if (FSMakeFSSpec(vRef, dirID, name, &spec) != noErr ||
-			    macos9_fsspec_to_path(&spec, path,
-				(long)sizeof path) != 0)
-				strcpy(path, "MacSurfData");
-			/* msg is 240 bytes - never let the path blow it */
-			pl = strlen(path);
-			if (pl > 180) {
-				strcpy(path + 177, "...");
-				pl = 180;
-			}
-			sprintf(msg, "Exported %ld bookmark%s to:\n%s", nrec,
-				(nrec == 1) ? "" : "s", path);
-			c_to_pstring(msg, pmsg);
-			StandardAlert(kAlertNoteAlert, pmsg, "\p", NULL, &item);
+			sprintf(msg, "Exported %ld bookmark%s to \"MacSurf Bookmarks Export.txt\" "
+				"in the MacSurfData folder.", nrec, (nrec == 1) ? "" : "s");
+			chrome_housekeeping_notice(LN_TYPE_INFO, "Bookmarks exported", msg,
+				FSMakeFSSpec(vRef, dirID, name, &spec) == noErr ? &spec : NULL);
 		}
 	}
 }
@@ -3804,6 +3801,10 @@ int  macos9_chrome_confirm_delete(const char *msg) { (void)msg; return 1; }
 int  macos9_chrome_ask(const char *msg, const char *detail,
 	const char *yes_label, const char *no_label)
 { (void)msg; (void)detail; (void)yes_label; (void)no_label; return 0; }
+int  macos9_chrome_ask_with_checkbox(const char *msg, const char *detail,
+	const char *yes_label, const char *no_label,
+	const char *checkbox, int *checked)
+{ (void)msg; (void)detail; (void)yes_label; (void)no_label; (void)checkbox; (void)checked; return 0; }
 int  macos9_chrome_prompt_line(const char *title, const char *initial,
 	char *out, int outcap)
 { (void)title; (void)initial; (void)out; (void)outcap; return 0; }
@@ -4370,17 +4371,14 @@ void macos9_about_show(void)
 	return;
 
 fallback:
-	/* Resource-free StandardAlert, built from the same supporter roll.
+	/* Resource-free system alert, built from the same supporter roll.
 	 * Reached only if the window or offscreen buffer can't be created. */
 	{
 		char   body[512];
 		char  *p = body;
-		short  i, item;
-		Str255 ptitle, pbody;
-		size_t blen;
+		short  i;
 		const char *title =
 			LOTUS_APP_NAME " " LOTUS_APP_VERSION " - a web browser for Mac OS 9 and Mac OS X";
-		size_t tlen = strlen(title);
 
 		strcpy(p, "Native TLS 1.3 via macTLS. Built on MacSurf and NetSurf.\r"
 			"by mplsllc\r\r");
@@ -4394,15 +4392,7 @@ fallback:
 			*p++ = '\r';
 		}
 		*p = '\0';
-
-		if (tlen > 255) tlen = 255;
-		ptitle[0] = (unsigned char) tlen;
-		memcpy(ptitle + 1, title, tlen);
-		blen = strlen(body);
-		if (blen > 255) blen = 255;
-		pbody[0] = (unsigned char) blen;
-		memcpy(pbody + 1, body, blen);
-		StandardAlert(kAlertNoteAlert, ptitle, pbody, NULL, &item);
+		macos9_notify_emergency_alert(title, body, 0);
 	}
 #endif
 }

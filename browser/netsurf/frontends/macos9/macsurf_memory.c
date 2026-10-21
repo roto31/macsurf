@@ -9,7 +9,8 @@
  *   1. Calls MaxBlock() + FreeMem() to capture heap state
  *      (proves fragmentation, not total exhaustion).
  *   2. Logs a FATAL line via macsurf_debug_log_writef + flush.
- *   3. Posts a native StandardAlert (kAlertStopAlert).
+ *   3. Shows a stop alert through macos9_notify_emergency_alert, which
+ *      allocates nothing.
  *   4. Calls ExitToShell() for a clean cooperative-app exit.
  *
  * The prefix file (macsurf_prefix.h) redirects malloc/calloc/
@@ -39,6 +40,7 @@
 #include "macsurf_memory.h"
 #include "macsurf_debug_log.h"
 #include "macsurf_osver.h"     /* fixes936 - macsurf_os_is_osx() */
+#include "macos9_notify.h"
 
 #ifdef __MACOS9__
 #include <Memory.h>
@@ -46,18 +48,6 @@
 #include <Processes.h>
 #include <Gestalt.h>
 #endif
-
-/* ------------------------------------------------------------------ */
-/* Internal: build a Pascal string in `out` from a C string `src`.    */
-/* Truncates at 255 bytes.                                            */
-/* ------------------------------------------------------------------ */
-static void c_to_pstr(unsigned char *out, const char *src)
-{
-    size_t len = strlen(src);
-    if (len > 255) len = 255;
-    out[0] = (unsigned char)len;
-    memcpy(out + 1, src, len);
-}
 
 /* ------------------------------------------------------------------ */
 /* Internal: OOM panic - log, alert, terminate. Never returns.       */
@@ -84,23 +74,16 @@ static void macsurf_oom_panic(size_t size)
      * sprintf is stack-safe and links on CW8 MSL
      * (vsnprintf is the problematic one). */
     {
-        unsigned char ptitle[256];
-        unsigned char pbody[256];
         char body_c[256];
-        short item;
-
-        c_to_pstr(ptitle,
-            "MacSurf: Out of Contiguous Memory");
 
         sprintf(body_c,
             "Need %ld bytes, largest gap %ld bytes "
             "(free %ld). Heap is too fragmented to continue.",
             (long)size, max_blk, free_mem);
 
-        c_to_pstr(pbody, body_c);
-
         /* 3. Show the alert (blocks until dismissed). */
-        StandardAlert(kAlertStopAlert, ptitle, pbody, NULL, &item);
+        macos9_notify_emergency_alert(
+            "Lotus Navigator: Out of Contiguous Memory", body_c, 1);
     }
 
     /* 4. Clean exit - cooperative-app safe. */

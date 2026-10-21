@@ -335,6 +335,9 @@ void macos9_cache_clear_ui(void);
 int  macos9_chrome_confirm_delete(const char *msg);
 int  macos9_chrome_ask(const char *msg, const char *detail,
 	const char *yes_label, const char *no_label);
+int  macos9_chrome_ask_with_checkbox(const char *msg, const char *detail,
+	const char *yes_label, const char *no_label,
+	const char *checkbox, int *checked);
 int  macos9_chrome_prompt_line(const char *title, const char *initial,
 	char *out, int outcap);
 

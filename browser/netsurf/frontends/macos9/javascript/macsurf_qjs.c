@@ -53,6 +53,7 @@
 #include "content/content_protected.h"
 #include "content/content_factory.h"
 #include "macos9_reconvert.h"
+#include "macos9_notify.h"
 
 extern int macsurf_ptr_is_heap(const void *);
 extern void html_content_set_diag_context(struct content *, unsigned long,
@@ -828,6 +829,75 @@ void macsurf_qjs_console_append(const char *line)
 /* alert / confirm / prompt                                             */
 /* ------------------------------------------------------------------ */
 
+#ifdef __MACOS9__
+#define QJS_DIALOG_PAGES 4
+
+static nsurl *qjs_cookie_doc_url(JSContext *ctx);
+
+/* alert() / confirm() bookkeeping for the last few pages that showed one,
+ * keyed by realm generation: unlike a JSContext address it is never reused. */
+static struct {
+	unsigned long gen;
+	int shown;
+	int stopped;
+} g_qjs_dialog_pages[QJS_DIALOG_PAGES];
+static int g_qjs_dialog_next = 0;
+
+static int qjs_dialog_page(JSContext *ctx)
+{
+	unsigned long gen = qjs_ctx_gen(ctx);
+	int i;
+
+	for (i = 0; i < QJS_DIALOG_PAGES; i++) {
+		if (g_qjs_dialog_pages[i].gen == gen) return i;
+	}
+	i = g_qjs_dialog_next;
+	g_qjs_dialog_next = (g_qjs_dialog_next + 1) % QJS_DIALOG_PAGES;
+	g_qjs_dialog_pages[i].gen = gen;
+	g_qjs_dialog_pages[i].shown = 0;
+	g_qjs_dialog_pages[i].stopped = 0;
+	return i;
+}
+
+/* A page's alert() (cancel_label NULL) or confirm(), titled with the page's
+ * host. Returns 1 for OK; 0 for Cancel, a stopped page, or a dialog that
+ * could not be shown. */
+static int qjs_page_dialog(JSContext *ctx, const char *message, const char *cancel_label)
+{
+	char title[96];
+	nsurl *url = qjs_cookie_doc_url(ctx);
+	lwc_string *host = NULL;
+	macos9_dialog dialog;
+	int page = qjs_dialog_page(ctx);
+	int answer;
+
+	if (g_qjs_dialog_pages[page].stopped) return 0;
+	g_qjs_dialog_pages[page].shown++;
+	strcpy(title, "This page says:");
+	if (url != NULL) host = nsurl_get_component(url, NSURL_HOST);
+	if (host != NULL) {
+		size_t n = lwc_string_length(host);
+		if (n > 80) n = 80;
+		memcpy(title, lwc_string_data(host), n);
+		strcpy(title + n, " says:");
+		lwc_string_unref(host);
+	}
+	memset(&dialog, 0, sizeof dialog);
+	dialog.title = title;
+	dialog.message = message;
+	dialog.icon = cancel_label != NULL ? LN_ICON_CAUTION : LN_ICON_NOTE;
+	dialog.buttons[0] = "OK";
+	dialog.buttons[1] = cancel_label;
+	if (macos9_notify_page_offers_stop(g_qjs_dialog_pages[page].shown)) {
+		dialog.checkbox = "Stop dialogs from this page";
+	}
+	dialog.play_sound = 1;
+	answer = macos9_notify_ask(&dialog);
+	if (dialog.checkbox_value) g_qjs_dialog_pages[page].stopped = 1;
+	return answer == 0;
+}
+#endif
+
 static JSValue qjs_alert(JSContext *ctx, JSValueConst this_val,
 		int argc, JSValueConst *argv)
 {
@@ -836,24 +906,7 @@ static JSValue qjs_alert(JSContext *ctx, JSValueConst this_val,
 	if (argc > 0) {
 		const char *msg = JS_ToCString(ctx, argv[0]);
 		if (msg) {
-			char macroman[256];
-			unsigned char pstr[256];
-			short item;
-			extern size_t macos9_utf8_to_macroman(const char *utf8,
-					size_t len, char *mac_out, size_t max_out);
-			macos9_utf8_to_macroman(msg, strlen(msg), macroman,
-					sizeof macroman);
-			{
-				size_t len = strlen(macroman);
-				if (len > 255) len = 255;
-				pstr[0] = (unsigned char)len;
-				{
-					size_t ii;
-					for (ii = 0; ii < len; ii++)
-						pstr[1 + ii] = (unsigned char)macroman[ii];
-				}
-			}
-			StandardAlert(kAlertNoteAlert, pstr, "\p", NULL, &item);
+			(void)qjs_page_dialog(ctx, msg, NULL);
 			JS_FreeCString(ctx, msg);
 		}
 	}
@@ -874,36 +927,9 @@ static JSValue qjs_confirm(JSContext *ctx, JSValueConst this_val,
 	if (argc > 0) {
 		const char *msg = JS_ToCString(ctx, argv[0]);
 		if (msg) {
-			char macroman[256];
-			unsigned char pstr[256];
-			short item;
-			AlertStdAlertParamRec params;
-			extern size_t macos9_utf8_to_macroman(const char *utf8,
-					size_t len, char *mac_out, size_t max_out);
-			macos9_utf8_to_macroman(msg, strlen(msg), macroman,
-					sizeof macroman);
-			{
-				size_t len = strlen(macroman);
-				if (len > 255) len = 255;
-				pstr[0] = (unsigned char)len;
-				{
-					size_t ii;
-					for (ii = 0; ii < len; ii++)
-						pstr[1 + ii] = (unsigned char)macroman[ii];
-				}
-			}
-			params.movable       = false;
-			params.helpButton    = false;
-			params.filterProc    = NULL;
-			params.defaultText   = (StringPtr)"\pOK";
-			params.cancelText    = (StringPtr)"\pCancel";
-			params.otherText     = NULL;
-			params.defaultButton = kAlertStdAlertOKButton;
-			params.cancelButton  = kAlertStdAlertCancelButton;
-			params.position      = kWindowDefaultPosition;
-			StandardAlert(kAlertCautionAlert, pstr, "\p", &params, &item);
+			int ok = qjs_page_dialog(ctx, msg, "Cancel");
 			JS_FreeCString(ctx, msg);
-			return JS_NewBool(ctx, item == kAlertStdAlertOKButton ? 1 : 0);
+			return JS_NewBool(ctx, ok);
 		}
 	}
 	return JS_FALSE;

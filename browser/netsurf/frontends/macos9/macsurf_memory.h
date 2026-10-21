@@ -8,7 +8,8 @@
  *
  * These functions NEVER return NULL (except safe_realloc with
  * size==0, which is a legal free). On failure they log
- * fragmentation diagnostics, post a native StandardAlert, and
+ * fragmentation diagnostics, show a stop alert (Lotus Notify's
+ * emergency alert), and
  * call ExitToShell().
  *
  * C89 compatible. Uses Carbon Toolbox (Memory.h, Dialogs.h).

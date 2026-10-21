@@ -3,8 +3,10 @@
  * See macos9_notify_policy.h.
  */
 #include <stddef.h>
+#include <string.h>
 
 #include "macos9_notify_policy.h"
+#include "macos9_proxy.h"
 
 const char *const macos9_notify_category_names[MACOS9_NOTIFY_CATEGORY_COUNT] = {
 	"downloads", "proxy", "security", "housekeeping", "web"
@@ -101,4 +103,42 @@ void macos9_notify_place_alert(const macos9_notify_rect *usable, int width, int 
 	out->top = usable->top + (spare_height > 0 ? spare_height / 3 : 0);
 	out->right = out->left + width;
 	out->bottom = out->top + height;
+}
+
+int macos9_notify_page_offers_stop(int dialogs_on_page)
+{
+	return dialogs_on_page >= MACOS9_NOTIFY_PAGE_STOP_FROM;
+}
+
+long macos9_notify_year_from_date(const char *compiler_date)
+{
+	long year = 0;
+	int i;
+
+	if (compiler_date == NULL || strlen(compiler_date) != 11) return 0;
+	for (i = 7; i < 11; i++) {
+		if (compiler_date[i] < '0' || compiler_date[i] > '9') return 0;
+		year = year * 10 + (compiler_date[i] - '0');
+	}
+	return year;
+}
+
+int macos9_notify_clock_suspect(long believed_year, long build_year)
+{
+	return believed_year > 0 && build_year > 0 && believed_year < build_year;
+}
+
+int macos9_notify_proxy_change(int *last_seen, int state)
+{
+	int previous = *last_seen;
+
+	if (state == MACOS9_PROXY_UNCONFIGURED) {
+		*last_seen = MACOS9_PROXY_UNCONFIGURED;
+		return MACOS9_NOTIFY_PROXY_QUIET;
+	}
+	if (state != MACOS9_PROXY_UP && state != MACOS9_PROXY_DOWN) return MACOS9_NOTIFY_PROXY_QUIET;
+	*last_seen = state;
+	if (state == previous) return MACOS9_NOTIFY_PROXY_QUIET;
+	if (state == MACOS9_PROXY_DOWN) return MACOS9_NOTIFY_PROXY_STOPPED;
+	return previous == MACOS9_PROXY_DOWN ? MACOS9_NOTIFY_PROXY_BACK : MACOS9_NOTIFY_PROXY_QUIET;
 }

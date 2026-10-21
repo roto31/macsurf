@@ -527,11 +527,11 @@ static long notify_post_unguarded(const macos9_notify_settings *settings, const 
 	int i;
 
 	if (notice->type == LN_TYPE_QUESTION) {
-		macsurf_debug_log_writef("NOTIFY post refused: questions use macos9_notify_ask");
+		macsurf_debug_log_writef("LIFE NOTIFY post refused: questions use macos9_notify_ask");
 		return 0;
 	}
 	status = notify_resolve(settings, notice, &result);
-	macsurf_debug_log_writef("NOTIFY post type=%d category=%s status=%d decision=%d style=%d position=%d sound=%d",
+	macsurf_debug_log_writef("LIFE NOTIFY post type=%d category=%s status=%d decision=%d style=%d position=%d sound=%d",
 		(int)notice->type, notice->category != NULL ? notice->category : "-", status,
 		(int)result.decision, result.style, result.position, result.sound);
 	if (status != LN_OK || result.decision != LN_DECISION_SHOW) return 0;
@@ -567,7 +567,7 @@ static long notify_post_unguarded(const macos9_notify_settings *settings, const 
 	SetRect(&bounds, 0, 0, s->width, 60);
 	if (CreateNewWindow(kFloatingWindowClass, kWindowCloseBoxAttribute, &bounds, &s->win) != noErr ||
 	    s->win == NULL) {
-		macsurf_debug_log_writef("NOTIFY window creation failed");
+		macsurf_debug_log_writef("LIFE NOTIFY window creation failed");
 		memset(s, 0, sizeof *s);
 		return 0;
 	}
@@ -945,7 +945,7 @@ static int notify_ask_with(const macos9_notify_settings *settings, macos9_dialog
 	}
 
 	if (d.checkbox != NULL) dialog->checkbox_value = GetControlValue(d.checkbox) != 0;
-	macsurf_debug_log_writef("NOTIFY ask buttons=%d answer=%d checkbox=%d position=%d sound=%d lines=%d",
+	macsurf_debug_log_writef("LIFE NOTIFY ask buttons=%d answer=%d checkbox=%d position=%d sound=%d lines=%d",
 		d.button_count, answer, dialog->checkbox_value, result.position, result.sound, lines);
 	DisposeWindow(d.win);
 	free(d.message);

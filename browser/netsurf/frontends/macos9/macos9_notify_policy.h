@@ -54,7 +54,8 @@ int macos9_notify_place(const macos9_notify_rect *usable, int position, int widt
                         int offset, macos9_notify_rect *out);
 
 /* Places a question where Mac alerts go: centred across usable, with a third
- * of the leftover height above it, so it never covers the notice stacks. */
+ * of the leftover height above it. It stays clear of the four corner stacks;
+ * top-centre and centre stacks can sit partly behind it while it is open. */
 void macos9_notify_place_alert(const macos9_notify_rect *usable, int width, int height,
                                macos9_notify_rect *out);
 

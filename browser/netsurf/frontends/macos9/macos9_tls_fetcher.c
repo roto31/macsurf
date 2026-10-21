@@ -1553,6 +1553,8 @@ static void hctx_fail(struct macos9_https_ctx *c, const char *why)
 				"date reads %s host=%s -- NOT a clock problem",
 				clk[0] ? clk : "(unreadable)",
 				c->host[0] ? c->host : "(unset)");
+			/* Still wrong if it reads earlier than the build year. */
+			macos9_notify_clock_check(clk);
 		}
 	}
 

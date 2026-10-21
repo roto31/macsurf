@@ -31,8 +31,9 @@
 #include "netsurf/content.h"
 #include "macos9.h"
 #include "macsurf_debug.h"
-#include "about_logo_data.h"   /* fixes726 - crisp 64x64 puffin PNG */
+#include "about_logo_data.h"   /* fixes726 - crisp 64x64 app emblem PNG */
 #include "manager_icons_data.h" /* fixes745 - History/Bookmark banner icons */
+#include "lotus_theme.h"
 
 #ifdef __MACOS9__
 #include <Carbon.h>
@@ -1773,7 +1774,7 @@ static void mgr_icon_ensure(int id)
 			&s_mgr_ic_gw[id], &s_mgr_ic_mask[id], &s_mgr_ic_src[id]);
 }
 
-/* fixes742/745 - a shiny gold gradient title banner across the top of a manager
+/* fixes742/745 - a blue gradient title banner across the top of a manager
  * window, with an icon (id 1=History, 2=Bookmarks, 0=none) + bold white title.
  * content is the window's local rect. */
 void macos9_chrome_mgr_header(const Rect *content, const char *title, int icon)
@@ -1784,14 +1785,13 @@ void macos9_chrome_mgr_header(const Rect *content, const char *title, int icon)
 	RGBColor white;
 	RGBColor accent;
 	white.red = white.green = white.blue = 0xFFFF;
-	accent.red = 0x8C8C; accent.green = 0x5A5A; accent.blue = 0x1010;  /* dark amber */
+	LOTUS_SET_RGBCOLOR(accent, LOTUS_BANNER_RULE);
 	band.left = content->left;
 	band.right = content->right;
 	band.top = content->top;
 	band.bottom = (short)(content->top + 34);   /* fixes744 - dialed back */
 	GetForeColor(&saved_fg);
-	/* fixes744 - MacSurf gold scheme (softened orange) instead of blue */
-	chrome_vgrad(&band, 0xF0, 0xA8, 0x40, 0xD2, 0x82, 0x1E);
+	chrome_vgrad(&band, LOTUS_RGB8(LOTUS_BANNER_TOP), LOTUS_RGB8(LOTUS_BANNER_BOTTOM));
 	ln.left = band.left; ln.right = band.right;
 	ln.top = (short)(band.bottom - 1); ln.bottom = band.bottom;
 	RGBForeColor(&accent); PaintRect(&ln);
@@ -1854,7 +1854,7 @@ static void chrome_draw_button(const Rect *r, ConstStr255Param label)
 		FrameRoundRect(r, 10, 10);
 		CloseRgn(btn);
 		SetClip(btn);
-		chrome_vgrad(r, 0xFD, 0xF6, 0xE6, 0xF0, 0xD8, 0xAC);  /* fixes745 - gold */
+		chrome_vgrad(r, LOTUS_RGB8(LOTUS_BUTTON_TOP), LOTUS_RGB8(LOTUS_BUTTON_BOTTOM));
 		SetClip(sav);
 	}
 	RGBForeColor(&blk);
@@ -2388,8 +2388,8 @@ void macos9_history_window_show(struct gui_window *g)
 
 				if (rows[r].is_header) {
 					RGBColor hc;
-					hc.red = 0x7A7A; hc.green = 0x4E4E; hc.blue = 0x1414;
-					chrome_vgrad(&tr, 0xFB, 0xF0, 0xDC, 0xF4, 0xE2, 0xC0);
+					LOTUS_SET_RGBCOLOR(hc, LOTUS_HEADER_TEXT);
+					chrome_vgrad(&tr, LOTUS_RGB8(LOTUS_ROW_TINT_TOP), LOTUS_RGB8(LOTUS_ROW_TINT_BOTTOM));
 					RGBForeColor(&hc);
 					TextFont(1); TextFace(bold); TextSize(11);
 					MoveTo((short)(list.left + 8), (short)(y + 14));
@@ -2400,11 +2400,11 @@ void macos9_history_window_show(struct gui_window *g)
 					int hi = rows[r].hidx;
 					if (r == sel) {
 						RGBColor selc;
-						selc.red = 0xE8E8; selc.green = 0x9E9E; selc.blue = 0x3838;
+						LOTUS_SET_RGBCOLOR(selc, LOTUS_SELECTION);
 						RGBForeColor(&selc); PaintRect(&tr);
 					} else if (((r - scroll_top) & 1) != 0) {
 						RGBColor st;
-						st.red = 0xFDFD; st.green = 0xF8F8; st.blue = 0xEFEF;
+						LOTUS_SET_RGBCOLOR(st, LOTUS_ROW_STRIPE);
 						RGBForeColor(&st); PaintRect(&tr);
 					}
 
@@ -3717,11 +3717,11 @@ void macos9_bookmark_window_show(struct gui_window *g)
 
 				if (r == sel) {
 					RGBColor selc;
-					selc.red = 0xE8E8; selc.green = 0x9E9E; selc.blue = 0x3838;
+					LOTUS_SET_RGBCOLOR(selc, LOTUS_SELECTION);
 					RGBForeColor(&selc); PaintRect(&tr);
 				} else if (((r - scroll_top) & 1) != 0) {
 					RGBColor st;
-					st.red = 0xFDFD; st.green = 0xF8F8; st.blue = 0xEFEF;
+					LOTUS_SET_RGBCOLOR(st, LOTUS_ROW_STRIPE);
 					RGBForeColor(&st); PaintRect(&tr);
 				}
 
@@ -3732,7 +3732,7 @@ void macos9_bookmark_window_show(struct gui_window *g)
 					if (r == sel) RGBForeColor(&wht);
 					else {
 						RGBColor fcol;
-						fcol.red = 0x7A7A; fcol.green = 0x4E4E; fcol.blue = 0x1414;
+						LOTUS_SET_RGBCOLOR(fcol, LOTUS_HEADER_TEXT);
 						RGBForeColor(&fcol);
 					}
 					FrameRect(&ficon);
@@ -3751,7 +3751,7 @@ void macos9_bookmark_window_show(struct gui_window *g)
 				if (r == sel) RGBForeColor(&wht);
 				else if (rows[r].is_folder) {
 					RGBColor fc;
-					fc.red = 0x7A7A; fc.green = 0x4E4E; fc.blue = 0x1414;
+					LOTUS_SET_RGBCOLOR(fc, LOTUS_HEADER_TEXT);
 					RGBForeColor(&fc);
 				} else {
 					RGBForeColor(&blk);
@@ -3906,7 +3906,7 @@ static void about_center(const char *s, short cx, short y)
 	DrawText(s, 0, n);
 }
 
-/* fixes726 - crisp About-box puffin. The old PlotIconID upscaled the 32x32
+/* fixes726 - crisp About-box emblem. The old PlotIconID upscaled the 32x32
  * icon-family member to 52x52 (visibly blocky). We decode a 64x64 PNG once
  * into a 32-bit colour GWorld plus a hand-built 1-bit mask (from alpha) and
  * CopyMask it over the animated gradient, so it composites cleanly (stars show
@@ -4042,7 +4042,7 @@ static void about_draw(GWorldPtr off, WindowRef win, const Rect *content,
 		}
 	}
 
-	/* 3. app icon (puffin) - crisp 64x64 CopyMask blit (fixes726), with a
+	/* 3. app icon - crisp 64x64 CopyMask blit (fixes726), with a
 	 * PlotIconID fallback if the PNG decode failed. */
 	{
 		Rect ir;

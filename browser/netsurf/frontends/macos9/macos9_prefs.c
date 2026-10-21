@@ -34,6 +34,7 @@
 #include "macos9.h"
 #include "macsurf_config.h"	/* MACSURF_HOME_URL */
 #include "macsurf_debug.h"
+#include "lotus_theme.h"
 
 #ifdef __MACOS9__
 #include <Carbon.h>
@@ -437,7 +438,7 @@ static void prefs_slider_icon(short left, short top)
 	RGBColor shade;
 	RGBColor white;
 	short i;
-	shade.red = 0x8C8C; shade.green = 0x5A5A; shade.blue = 0x1010;
+	LOTUS_SET_RGBCOLOR(shade, LOTUS_BANNER_RULE);
 	white.red = white.green = white.blue = 0xFFFF;
 	for (i = 0; i < 3; i++) {
 		Rect tr;
@@ -461,13 +462,13 @@ static void prefs_banner(const Rect *content, const char *title)
 	RGBColor white;
 	RGBColor accent;
 	white.red = white.green = white.blue = 0xFFFF;
-	accent.red = 0x8C8C; accent.green = 0x5A5A; accent.blue = 0x1010;
+	LOTUS_SET_RGBCOLOR(accent, LOTUS_BANNER_RULE);
 	band.left = content->left;
 	band.right = content->right;
 	band.top = content->top;
 	band.bottom = (short)(content->top + PREFS_BANNER_H);
 	GetForeColor(&saved_fg);
-	prefs_vgrad(&band, 0xF0, 0xA8, 0x40, 0xD2, 0x82, 0x1E);
+	prefs_vgrad(&band, LOTUS_RGB8(LOTUS_BANNER_TOP), LOTUS_RGB8(LOTUS_BANNER_BOTTOM));
 	ln.left = band.left; ln.right = band.right;
 	ln.top = (short)(band.bottom - 1); ln.bottom = band.bottom;
 	RGBForeColor(&accent); PaintRect(&ln);

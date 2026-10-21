@@ -54,6 +54,18 @@ hardware; no binary has been published.
 ### Changed
 
 - `http_proxy` now defaults to on. With no proxy address configured it does nothing.
+- New chrome colour scheme matched to Mac OS X 10.5 Leopard's Aqua Blue, replacing MacSurf's
+  orange and gold: toolbar buttons, loading spinner, progress bar, URL-field focus ring, hover
+  highlight, the History, Bookmarks, Downloads and Preferences title banners, list selection and
+  stripes, and the default favicon (a blue globe instead of the puffin). One accent colour, used
+  only for interactive and selected states; every text and control pairing meets its contrast
+  minimum (4.5:1 text, 3:1 large text and controls). Colours live in
+  [`lotus_theme.h`](browser/netsurf/frontends/macos9/lotus_theme.h); the image headers are generated.
+
+### Removed
+
+- The MacSurf orange/gold scheme and its artwork: orange toolbar icons, the puffin loading
+  animation and favicon, and the gold banners, buttons and list colours.
 
 ### Fixed
 

@@ -16,6 +16,7 @@
 #include "macsurf_memory.h"    /* macsurf_recon_mem() */
 #include "macsurf_timebase.h"
 #include "macsurf_osver.h"     /* fixes936 -- macsurf_os_is_osx() */
+#include "lotus_theme.h"
 
 #ifdef __MACOS9__
 #include <OpenTransport.h>
@@ -154,21 +155,21 @@ double macos9_micros(void)
 static void draw_url_bar(struct gui_window *gw) {
 #ifdef __MACOS9__
 	/* fixes727 - rounded "pill" URL field. White rounded canvas, a soft grey
-	 * border at rest and a 2px orange focus ring while the field is active for
-	 * typing. Geneva 12 text, favicon at the left. The rounded corners sit on
+	 * border at rest and a 2px blue keyboard-focus ring while the field is active
+	 * for typing. Geneva 12 text, favicon at the left. The rounded corners sit on
 	 * the toolbar gradient, which draw_toolbar_bg repaints just before this. */
 	RGBColor black  = {0, 0, 0};
 	RGBColor white  = {0xFFFF, 0xFFFF, 0xFFFF};
 	RGBColor border = {0x9999, 0x9999, 0x9999};    /* #999 soft edge */
-	RGBColor orange = {0xF4F4, 0x8484, 0x1616};    /* focus accent */
+	RGBColor focus  = LOTUS_RGBCOLOR(LOTUS_FOCUS_RING);
 	Rect u = gw->url_rect;
 
 	/* white rounded canvas */
 	RGBForeColor(&white);
 	PaintRoundRect(&u, 12, 12);
-	/* border - orange focus ring when active, soft grey otherwise */
+	/* border - focus ring when active, soft grey otherwise */
 	if (gw->url_field_active) {
-		RGBForeColor(&orange); PenSize(2, 2);
+		RGBForeColor(&focus); PenSize(2, 2);
 	} else {
 		RGBForeColor(&border); PenSize(1, 1);
 	}

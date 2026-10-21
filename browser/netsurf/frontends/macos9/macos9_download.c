@@ -756,7 +756,7 @@ static void dl_mgr_paint(void)
 	GetWindowPortBounds(g_dl_mgr_win, &pr);
 	EraseRect(&pr);
 
-	/* Gold header banner */
+	/* Header banner */
 	macos9_chrome_mgr_header(&pr, "Downloads", 0);
 
 	/* Scrollbar update */

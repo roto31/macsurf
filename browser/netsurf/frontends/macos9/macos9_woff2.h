@@ -6,8 +6,8 @@
  * one into a plain TrueType sfnt that macos9_webfont.c's existing
  * macos9_webfont_parse_sfnt() path can consume directly.
  *
- * C89 (CW8). The decoder is a port of google/woff2's woff2_dec.cc (Apache
- * 2.0); see the .c for full provenance.
+ * C89 (CW8). The decoder is a clean-room implementation of the W3C WOFF 2.0
+ * Recommendation (GPL-2.0-only); see Lotus Navigator docs/woff2-clean-room.md.
  */
 
 #ifndef MACSURF_MACOS9_WOFF2_H

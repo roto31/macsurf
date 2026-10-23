@@ -529,15 +529,38 @@ void macos9_window_invalidate_rect(struct gui_window *g, int px, int py, int pw,
 #endif
 }
 
+/* Scroll bars hold 16-bit values. A page scrolling further than this is
+ * mapped onto 0..MACOS9_SCROLL_CONTROL_MAX instead of being cut off there:
+ * a 6000-row table (330,000 px) could otherwise only be scrolled to y=32767. */
+#define MACOS9_SCROLL_CONTROL_MAX 32767
+
+static int macos9_scroll_limit(struct gui_window *g, int vertical) {
+	int limit;
+	if (vertical)
+		limit = g->content_height - (g->content_rect.bottom - g->content_rect.top);
+	else
+		limit = g->content_width - (g->content_rect.right - g->content_rect.left);
+	return limit < 0 ? 0 : limit;
+}
+
+static short macos9_scroll_to_control(int position, int limit) {
+	if (limit <= MACOS9_SCROLL_CONTROL_MAX) return (short)position;
+	return (short)((double)position * MACOS9_SCROLL_CONTROL_MAX / limit);
+}
+
+static int macos9_scroll_from_control(int value, int limit) {
+	if (limit <= MACOS9_SCROLL_CONTROL_MAX) return value;
+	return (int)((double)value * limit / MACOS9_SCROLL_CONTROL_MAX);
+}
+
 void macos9_window_update_scrollbars(struct gui_window *g) {
-	int vw, vh, mx, my;
+	int mx, my;
 	if(!g || (g->mw != NULL && g != g->mw->active_tab)) return;
-	vw=g->content_rect.right-g->content_rect.left; vh=g->content_rect.bottom-g->content_rect.top;
-	mx=g->content_width-vw; my=g->content_height-vh; if(mx<0) mx=0; if(my<0) my=0;
+	mx = macos9_scroll_limit(g, 0); my = macos9_scroll_limit(g, 1);
 #ifdef __MACOS9__
 	SetPortWindowPort(g->window);
-	if(g->vscroll) { SetControlMaximum(g->vscroll, (short)(my>32767?32767:my)); SetControlValue(g->vscroll, (short)g->scroll_y); HiliteControl(g->vscroll, (short)(my>0?0:255)); Draw1Control(g->vscroll); }
-	if(g->hscroll) { SetControlMaximum(g->hscroll, (short)(mx>32767?32767:mx)); SetControlValue(g->hscroll, (short)g->scroll_x); HiliteControl(g->hscroll, (short)(mx>0?0:255)); Draw1Control(g->hscroll); }
+	if(g->vscroll) { SetControlMaximum(g->vscroll, (short)(my>MACOS9_SCROLL_CONTROL_MAX?MACOS9_SCROLL_CONTROL_MAX:my)); SetControlValue(g->vscroll, macos9_scroll_to_control(g->scroll_y, my)); HiliteControl(g->vscroll, (short)(my>0?0:255)); Draw1Control(g->vscroll); }
+	if(g->hscroll) { SetControlMaximum(g->hscroll, (short)(mx>MACOS9_SCROLL_CONTROL_MAX?MACOS9_SCROLL_CONTROL_MAX:mx)); SetControlValue(g->hscroll, macos9_scroll_to_control(g->scroll_x, mx)); HiliteControl(g->hscroll, (short)(mx>0?0:255)); Draw1Control(g->hscroll); }
 #endif
 }
 
@@ -618,7 +641,7 @@ void macos9_window_handle_scrollbar_click(struct gui_window *g, ControlRef c, sh
 	pt = *(Point*)lp;
 	SetPortWindowPort(g->window);
 	cur = (c == g->vscroll) ? g->scroll_y : g->scroll_x;
-	mx  = (c == g->vscroll) ? GetControlMaximum(g->vscroll) : GetControlMaximum(g->hscroll);
+	mx  = macos9_scroll_limit(g, c == g->vscroll);
 	switch (p) {
 	case 20: cur -= step; break;          /* up/left arrow */
 	case 21: cur += step; break;          /* down/right arrow */
@@ -633,10 +656,12 @@ void macos9_window_handle_scrollbar_click(struct gui_window *g, ControlRef c, sh
 		Rect cb;
 		short arrow = 16;
 		unsigned long lastdraw = 0;
+		long control_max = GetControlMaximum(c);
 		GetControlBounds(c, &cb);
 		while (StillDown()) {
 			Point mp;
 			long span, rel, val;
+			int position;
 			GetMouse(&mp);
 			if (c == g->vscroll) {
 				span = (long)((cb.bottom - arrow) - (cb.top + arrow));
@@ -648,22 +673,23 @@ void macos9_window_handle_scrollbar_click(struct gui_window *g, ControlRef c, sh
 			if (span < 1) span = 1;
 			if (rel < 0) rel = 0;
 			if (rel > span) rel = span;
-			val = rel * (long)mx / span;
+			val = rel * control_max / span;
 			if ((short)val != GetControlValue(c)) {
 				SetControlValue(c, (short)val);
+				position = macos9_scroll_from_control((int)val, mx);
 				if (c == g->vscroll)
-					macos9_window_scroll_to(g, g->scroll_x, (int)val);
+					macos9_window_scroll_to(g, g->scroll_x, position);
 				else
-					macos9_window_scroll_to(g, (int)val, g->scroll_y);
+					macos9_window_scroll_to(g, position, g->scroll_y);
 				macos9_throttled_repaint(g, &lastdraw);
 			}
 		}
-		cur = GetControlValue(c);
+		cur = (c == g->vscroll) ? g->scroll_y : g->scroll_x;
 		break;
 	}
 	default:
 		TrackControl(c, pt, NULL);
-		cur = GetControlValue(c);
+		cur = macos9_scroll_from_control(GetControlValue(c), mx);
 		break;
 	}
 	if (cur < 0) cur = 0;

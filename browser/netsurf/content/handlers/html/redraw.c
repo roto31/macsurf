@@ -64,6 +64,12 @@ extern void macsurf_recon_clamp(const char *field, long value);
 			(f) = (fb); \
 		} \
 	} while (0)
+
+/* Vertical limit of the clamp in html_redraw_box: the same 1,000,000 px
+ * ceiling as LAYOUT_SAFE_MAX. Real pages exceed 200,000 px (a 4,500-row
+ * table is 258,000 px) and were collapsed to blank; the poison values the
+ * clamp catches (-572662307, -1515870811) are still far outside it. */
+#define MSURF_REDRAW_Y_MAX 1000000
 #include "netsurf/content.h"
 #include "netsurf/browser_window.h"
 #include "netsurf/plotters.h"
@@ -4221,9 +4227,9 @@ bool html_redraw_box(const html_content *html, struct box *box,
 	 * wider). */
 	{
 		MSURF_CLAMP(box->x, -10000, 10000, 0);
-		MSURF_CLAMP(box->y, -200000, 200000, 0);
+		MSURF_CLAMP(box->y, -MSURF_REDRAW_Y_MAX, MSURF_REDRAW_Y_MAX, 0);
 		MSURF_CLAMP(box->width, 0, 10000, 0);
-		MSURF_CLAMP(box->height, 0, 200000, 0);
+		MSURF_CLAMP(box->height, 0, MSURF_REDRAW_Y_MAX, 0);
 		MSURF_CLAMP(box->padding[LEFT], 0, 10000, 0);
 		MSURF_CLAMP(box->padding[TOP], 0, 10000, 0);
 		MSURF_CLAMP(box->padding[RIGHT], 0, 10000, 0);
@@ -4233,9 +4239,9 @@ bool html_redraw_box(const html_content *html, struct box *box,
 		MSURF_CLAMP(box->border[RIGHT].width, 0, 1000, 0);
 		MSURF_CLAMP(box->border[BOTTOM].width, 0, 1000, 0);
 		MSURF_CLAMP(box->descendant_x0, -10000, 10000, 0);
-		MSURF_CLAMP(box->descendant_y0, -200000, 200000, 0);
+		MSURF_CLAMP(box->descendant_y0, -MSURF_REDRAW_Y_MAX, MSURF_REDRAW_Y_MAX, 0);
 		MSURF_CLAMP(box->descendant_x1, -10000, 10000, box->width);
-		MSURF_CLAMP(box->descendant_y1, -200000, 200000, box->height);
+		MSURF_CLAMP(box->descendant_y1, -MSURF_REDRAW_Y_MAX, MSURF_REDRAW_Y_MAX, box->height);
 		/* Expand descendants if collapsed - happens when layout hasn't
 		 * fully run but the box has real text children. Skip this for
 		 * boxes that can carry an element scrollbar (overflow auto/scroll):

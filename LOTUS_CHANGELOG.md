@@ -103,6 +103,9 @@ hardware; no binary has been published.
 - Pages taller than 32,767 pixels can be scrolled to the end. The scroll bars hold 16-bit values, so
   the scroll range was cut off at y=32767 (a 1,100-row table stopped at row 384); the full range is
   now mapped onto the scroll bar.
+- Pages taller than 200,000 pixels are drawn. A defensive clamp in the redraw walk reset any box
+  taller or lower than 200,000 px to 0, so a 4,500-row table (258,000 px) showed a blank page; the
+  limit is now 1,000,000 px, the same as the layout limit.
 - Clean CodeWarrior 8.3 builds (no cached object files): `file.c` and `resource.c` had a
   mis-escaped `SLEN(\"If-None-Match:\")` and included the renamed `utils/time.h` (now
   `utils/ns_time.h`); `about.c` and `about/config.c` include `content/fetchers/about/config.h`

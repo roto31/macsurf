@@ -1135,7 +1135,7 @@ void macos9_notify_show_examples(const macos9_notify_settings *settings)
 	int answer;
 
 	notify_example(settings, LN_TYPE_INFO, "housekeeping", NULL, "Information",
-		"This is how Lotus Navigator tells you something finished. Click to open " MACSURF_HOME_URL,
+		"This is how Lotus Navigator tells you something finished. Click to open your start page.",
 		MACSURF_HOME_URL);
 	s_example_progress = 0;
 	s_example_next_tick = TickCount() + NOTIFY_TICKS;

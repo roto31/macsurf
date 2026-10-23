@@ -67,6 +67,12 @@ hardware; no binary has been published.
 
 ### Changed
 
+- The default home page is now `about:lotus`, a built-in Lotus Navigator start page (under 2 KB,
+  no network needed, no outside links) with the Open Location, Reload and Home shortcuts and links
+  to `about:cache` and `about:memory`. It replaces MacSurf's web home page. A home page set in
+  Preferences is kept. The Show Examples information notice now reads "Click to open your start
+  page" and opens `about:lotus`. See
+  [`macsurf_config.h`](browser/netsurf/frontends/macos9/macsurf_config.h).
 - Page `alert()` / `confirm()`, the delete confirmation, cache and bookmark messages and the About
   fallback use Lotus Notify instead of `StandardAlert`. Page dialogs are titled "*host* says:",
   show long text in full and offer "Stop dialogs from this page" from the second dialog (a stopped
@@ -113,6 +119,11 @@ hardware; no binary has been published.
 
 ### Security
 
+- WOFF2 web fonts are decoded by a new clean-room decoder written from the W3C WOFF 2.0
+  Recommendation (GPL-2.0-only), replacing the google/woff2-derived port whose Apache-2.0 origin
+  conflicted with GPL-2.0-only. Same entry point (`macos9_woff2_to_ttf`); output is capped at 32 MB
+  and font collections are refused. See
+  [`macos9_woff2.h`](browser/netsurf/frontends/macos9/macos9_woff2.h).
 - The HTTPS proxy consent question has a "Remember for this proxy" checkbox, ticked by default;
   unticked, consent lasts until the browser quits and nothing is saved.
 - A question that cannot be shown answers "no" (`macos9_notify_ask` returns −1) instead of the
@@ -130,6 +141,4 @@ hardware; no binary has been published.
 
 ### Known issues
 
-- `macos9_woff2.c` is described as a port of google/woff2 (Apache-2.0); its compatibility with
-  GPL-2.0-only is unresolved, so binary releases are on hold.
 - macTLS states MIT in its README but ships no LICENSE file.

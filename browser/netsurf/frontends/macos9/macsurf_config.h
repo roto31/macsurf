@@ -8,6 +8,6 @@
 #ifndef MACSURF_CONFIG_H
 #define MACSURF_CONFIG_H
 
-#define MACSURF_HOME_URL "https://mactrove.com/"
+#define MACSURF_HOME_URL "about:lotus"
 
 #endif /* MACSURF_CONFIG_H */

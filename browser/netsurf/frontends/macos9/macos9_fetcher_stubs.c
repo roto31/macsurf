@@ -600,6 +600,26 @@ stub_can_fetch(const struct nsurl *url)
 	return true;
 }
 
+/* about:lotus, the default home page.  Built in so a first launch needs no
+ * network; must stay smaller than the 2048-byte body_buf. */
+static const char LOTUS_START_PAGE[] =
+	"<html><head><title>" LOTUS_APP_NAME "</title>"
+	"<style>body{font-family:Geneva,sans-serif;"
+	"background:#FFF4D0;color:#002030;margin:24px}"
+	"h1{font-size:20px}td{padding:2px 16px 2px 0}</style></head><body>"
+	"<h1>" LOTUS_APP_NAME "</h1>"
+	"<p>Welcome. Type a web address in the location bar at the top of "
+	"the window and press Return.</p>"
+	"<table>"
+	"<tr><td>Command-L</td><td>Open Location: select the location bar</td></tr>"
+	"<tr><td>Command-R</td><td>Reload the page</td></tr>"
+	"<tr><td>Command-H</td><td>Go to your home page</td></tr>"
+	"</table>"
+	"<p>To start somewhere else, open Preferences and change the home page.</p>"
+	"<p>Diagnostics: <a href=\"about:cache\">about:cache</a> "
+	"<a href=\"about:memory\">about:memory</a></p>"
+	"</body></html>";
+
 /* fixes957d  -  fail_reason/fail_site are the "reason" and "siteurl" fields core
  * posts to about:query/fetcherror, and they MUST be handed in here rather than
  * written onto the returned context afterwards: this function builds the error
@@ -766,7 +786,12 @@ stub_setup_scheme(struct fetch *parent_fetch, struct nsurl *url,
 	/* fixes335 (#99 #107)  -  diagnostic about: pages. */
 	if (scheme == SCH_ABOUT) {
 		int rn = 0;
-		if (strncmp(ctx->path, "cache", 5) == 0 &&
+		if (strncmp(ctx->path, "lotus", 5) == 0 &&
+		    (ctx->path[5] == '\0' || ctx->path[5] == '/')) {
+			if (sizeof(LOTUS_START_PAGE) < sizeof(ctx->body_buf)) {
+				rn = sprintf(ctx->body_buf, "%s", LOTUS_START_PAGE);
+			}
+		} else if (strncmp(ctx->path, "cache", 5) == 0 &&
 		    (ctx->path[5] == '\0' || ctx->path[5] == '/')) {
 			extern long macsurf__site_css_skip;
 			extern unsigned long macsurf__site_css_total_bytes;

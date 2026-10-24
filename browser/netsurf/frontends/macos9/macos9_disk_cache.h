@@ -81,6 +81,11 @@ int  macos9_cache_post_bypass_active(const char *url);
 /* Returns 1 if this (status, mime) pair is worth persisting. */
 int macos9_cache_mime_eligible(int status, const char *mime);
 
+/* Returns 0 if a captured header block (macos9_cache_capture_hdr) forbids
+ * persisting the response: Cache-Control no-store or private, or any Vary
+ * (entries are keyed by URL alone). Both fetchers and the lookup apply it. */
+int macos9_cache_hdrs_persistable(const char *hdrs);
+
 /* fixes981 - copy the response headers llcache needs in order to reason
  * about freshness (Date, Age, Expires, Cache-Control) and to revalidate
  * (ETag, Last-Modified) out of a full header line. Appends "Name: value\r\n"

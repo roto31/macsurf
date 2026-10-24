@@ -412,6 +412,75 @@ static unsigned long cache_read_be32(const unsigned char *p)
 
 /* ---- public API ---- */
 
+/* fixes1297 (#167, Track B) - find the line in a CRLF-joined cache_hdrs blob
+ * (macos9_cache_capture_hdr's format) whose name
+ * matches `prefix` case-insensitively. Returns NULL if absent. */
+static const char *cache_hdrs_find(const char *hdrs,
+		const char *prefix)
+{
+	const char *p = hdrs;
+	size_t plen = strlen(prefix);
+	if (hdrs == NULL) return NULL;
+	while (*p != '\0') {
+		if (strncasecmp(p, prefix, plen) == 0) return p;
+		p = strstr(p, "\r\n");
+		if (p == NULL) break;
+		p += 2;
+	}
+	return NULL;
+}
+
+/* True if the named header line exists and contains `needle` (case-
+ * insensitive) anywhere before its terminating CRLF. */
+static int cache_hdrs_line_has(const char *hdrs, const char *prefix,
+		const char *needle)
+{
+	const char *line = cache_hdrs_find(hdrs, prefix);
+	const char *eol;
+	size_t linelen;
+	char buf[256];
+	if (line == NULL) return 0;
+	eol = strstr(line, "\r\n");
+	linelen = (eol != NULL) ? (size_t)(eol - line) : strlen(line);
+	if (linelen >= sizeof(buf)) linelen = sizeof(buf) - 1;
+	memcpy(buf, line, linelen);
+	buf[linelen] = '\0';
+	{
+		size_t i;
+		size_t nlen = strlen(needle);
+		if (nlen == 0 || linelen < nlen) return 0;
+		for (i = 0; i + nlen <= linelen; i++) {
+			if (strncasecmp(buf + i, needle, nlen) == 0) return 1;
+		}
+	}
+	return 0;
+}
+
+/* True if the named header line exists and has any non-whitespace content
+ * after its "name:" prefix (used for Vary: any nonempty value disqualifies,
+ * per the #167 backlog plan -- MacSurf's disk cache keys entries by URL
+ * alone, so it can't safely honour a Vary it can't index against). */
+static int cache_hdrs_line_nonempty(const char *hdrs,
+		const char *prefix)
+{
+	const char *line = cache_hdrs_find(hdrs, prefix);
+	const char *v;
+	size_t plen = strlen(prefix);
+	if (line == NULL) return 0;
+	v = line + plen;
+	while (*v == ' ' || *v == '\t') v++;
+	return (*v != '\0' && *v != '\r' && *v != '\n');
+}
+
+int macos9_cache_hdrs_persistable(const char *hdrs)
+{
+	if (hdrs == NULL || hdrs[0] == '\0') return 1;
+	if (cache_hdrs_line_has(hdrs, "cache-control:", "no-store")) return 0;
+	if (cache_hdrs_line_has(hdrs, "cache-control:", "private")) return 0;
+	if (cache_hdrs_line_nonempty(hdrs, "vary:")) return 0;
+	return 1;
+}
+
 int macos9_cache_mime_eligible(int status, const char *mime)
 {
 	if (status != 200) return 0;
@@ -1009,6 +1078,13 @@ int macos9_cache_lookup_hdrs(const char *url, char **body_out,
 		}
 	}
 	hdrs_buf[hdrs_len] = '\0';
+	/* A copy whose own headers forbid storing it is deleted, never served. */
+	if (!macos9_cache_hdrs_persistable(hdrs_buf)) {
+		FSClose(ref);
+		(void)FSpDelete(&spec);
+		macsurf_debug_log_writef("CACHE drop not-persistable url=%s", url);
+		return 0;
+	}
 
 	body = (char *)malloc(body_len);
 	if (body == NULL) {

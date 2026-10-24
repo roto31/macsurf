@@ -2674,66 +2674,6 @@ static int host_is_fb_dynamic(const char *host)
 			sizeof(fb_dynamic_suffixes[0]));
 }
 
-/* fixes1297 (#167, Track B) - find the line in a CRLF-joined cache_hdrs blob
- * (macos9_cache_capture_hdr's format, macos9_disk_cache.c) whose name
- * matches `prefix` case-insensitively. Returns NULL if absent. */
-static const char *macsurf__cache_hdrs_find(const char *hdrs,
-		const char *prefix)
-{
-	const char *p = hdrs;
-	size_t plen = strlen(prefix);
-	if (hdrs == NULL) return NULL;
-	while (*p != '\0') {
-		if (strncasecmp(p, prefix, plen) == 0) return p;
-		p = strstr(p, "\r\n");
-		if (p == NULL) break;
-		p += 2;
-	}
-	return NULL;
-}
-
-/* True if the named header line exists and contains `needle` (case-
- * insensitive) anywhere before its terminating CRLF. */
-static int macsurf__cache_hdrs_line_has(const char *hdrs, const char *prefix,
-		const char *needle)
-{
-	const char *line = macsurf__cache_hdrs_find(hdrs, prefix);
-	const char *eol;
-	size_t linelen;
-	char buf[256];
-	if (line == NULL) return 0;
-	eol = strstr(line, "\r\n");
-	linelen = (eol != NULL) ? (size_t)(eol - line) : strlen(line);
-	if (linelen >= sizeof(buf)) linelen = sizeof(buf) - 1;
-	memcpy(buf, line, linelen);
-	buf[linelen] = '\0';
-	{
-		size_t i;
-		size_t nlen = strlen(needle);
-		if (nlen == 0 || linelen < nlen) return 0;
-		for (i = 0; i + nlen <= linelen; i++) {
-			if (strncasecmp(buf + i, needle, nlen) == 0) return 1;
-		}
-	}
-	return 0;
-}
-
-/* True if the named header line exists and has any non-whitespace content
- * after its "name:" prefix (used for Vary: any nonempty value disqualifies,
- * per the #167 backlog plan -- MacSurf's disk cache keys entries by URL
- * alone, so it can't safely honour a Vary it can't index against). */
-static int macsurf__cache_hdrs_line_nonempty(const char *hdrs,
-		const char *prefix)
-{
-	const char *line = macsurf__cache_hdrs_find(hdrs, prefix);
-	const char *v;
-	size_t plen = strlen(prefix);
-	if (line == NULL) return 0;
-	v = line + plen;
-	while (*v == ' ' || *v == '\t') v++;
-	return (*v != '\0' && *v != '\r' && *v != '\n');
-}
-
 /* fixes1297 (#167, Track B) - the single response-level persistability
  * gate. Consolidates status/MIME eligibility (existing
  * macos9_cache_mime_eligible) with the two new checks this track adds
@@ -2744,18 +2684,8 @@ static int macsurf__cache_hdrs_line_nonempty(const char *hdrs,
  * exclusion is needed. */
 static int macos9_cache_response_persistable(const struct macos9_https_ctx *c)
 {
-	if (!macos9_cache_mime_eligible(c->status, c->mime)) return 0;
-	if (c->cache_hdrs[0] != '\0') {
-		if (macsurf__cache_hdrs_line_has(c->cache_hdrs,
-				"cache-control:", "no-store"))
-			return 0;
-		if (macsurf__cache_hdrs_line_has(c->cache_hdrs,
-				"cache-control:", "private"))
-			return 0;
-		if (macsurf__cache_hdrs_line_nonempty(c->cache_hdrs, "vary:"))
-			return 0;
-	}
-	return 1;
+	return macos9_cache_mime_eligible(c->status, c->mime) &&
+		macos9_cache_hdrs_persistable(c->cache_hdrs);
 }
 
 /* fixes378 (#167) - strip any persisted 'noscript=...' token out of an

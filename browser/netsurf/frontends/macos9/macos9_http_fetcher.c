@@ -1275,7 +1275,8 @@ static void mfs_parse_headers(struct macos9_fetch_ctx *c) {
 	 * outgrows MACSURF_CACHE_MAX_BYTES.
 	 * fixes312 (#144) - POST responses are NEVER cached. */
 	if (c->post_body == NULL &&
-	    macos9_cache_mime_eligible(c->status, c->mime)) {
+	    macos9_cache_mime_eligible(c->status, c->mime) &&
+	    macos9_cache_hdrs_persistable(c->cache_hdrs)) {
 		c->cache_eligible = 1;
 		/* fixes987 - open the cache file up front and write through. */
 		if (c->url != NULL) {

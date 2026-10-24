@@ -2818,7 +2818,7 @@ static int chrome_confirm_destructive(const char *msg, const char *action)
 
 	memset(&dialog, 0, sizeof dialog);
 	dialog.title = msg;
-	dialog.message = "You can\325t undo this action.";
+	dialog.message = "You can\342\200\231t undo this action.";
 	dialog.icon = LN_ICON_CAUTION;
 	dialog.buttons[0] = action;
 	dialog.buttons[1] = "Cancel";

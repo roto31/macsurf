@@ -34,6 +34,7 @@
 #include "macos9.h"
 #include "macsurf_config.h"	/* MACSURF_HOME_URL */
 #include "macsurf_debug.h"
+#include "macsurf_osver.h"
 #include "lotus_theme.h"
 #include "macos9_notify.h"
 
@@ -1069,6 +1070,17 @@ static void prefs_draw_cstr(short h, short v, const char *text)
 	DrawText(text, 0, (short)strlen(text));
 }
 
+/* Mac OS 9 draws a pop-up's value itself; on Mac OS X these pop-ups show
+ * nothing unless the value is drawn here. */
+static void prefs_popup_label(ControlRef c, const struct prefs_popup_def *def, const Rect *r)
+{
+	int idx;
+	if (c == NULL || !macsurf_os_is_osx()) return;
+	idx = GetControlValue(c) - 1;
+	if (idx < 0 || idx >= def->count) return;
+	prefs_draw_cstr((short)(r->left + 8), (short)(r->top + 15), def->labels[idx]);
+}
+
 static void prefs_paint_notify(struct prefs_win *pw)
 {
 	RGBColor black_c;
@@ -1096,7 +1108,12 @@ static void prefs_paint_notify(struct prefs_win *pw)
 	}
 	prefs_draw_cstr((short)(s_ck_sound_ctrl_rect.left + 22), (short)(s_ck_sound_ctrl_rect.top + 14),
 		"Play a sound");
-	(void)pw;
+
+	prefs_popup_label(pw->pp_position, &s_popup_position, &s_pp_position_rect);
+	prefs_popup_label(pw->pp_duration, &s_popup_duration, &s_pp_duration_rect);
+	for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
+		prefs_popup_label(pw->pp_style[i], &s_popup_style, &s_pp_style_rect[i]);
+	}
 
 	RGBForeColor(&gray_c);
 	TextFont(3); TextSize(9);

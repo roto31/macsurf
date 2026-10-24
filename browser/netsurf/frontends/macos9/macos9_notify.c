@@ -978,8 +978,8 @@ static int notify_dialog_key(notify_dialog_state *d, const EventRecord *ev)
 	int key_code = (int)((ev->message & keyCodeMask) >> 8);
 	int cancel = d->button_count > 1 ? 1 : 0;
 
-	macsurf_debug_log_writef("LIFE NOTIFY key what=%d char=%d code=0x%02x mods=0x%04x",
-		(int)ev->what, (int)(unsigned char)ch, key_code, (unsigned int)ev->modifiers);
+	macsurf_debug_log_writef("LIFE NOTIFY key what=%d char=%d code=%d mods=%d",
+		(int)ev->what, (int)(unsigned char)ch, key_code, (int)ev->modifiers);
 	if (ch == '\r' || ch == 0x03) {
 		notify_dialog_flash(d->buttons[0]);
 		return 0;

@@ -85,13 +85,14 @@ hardware; no binary has been published.
   - On Mac OS X, questions have no window title and note-level questions show the application icon.
   - Pop-up notices no longer show a default ring on OK (Return never reaches a floating window).
     Questions sit a fifth of the free height from the top instead of a third.
-  - Esc is recognised by key code as well as character in Preferences, Find, the text prompts and
-    About. About also closes with Command-period and Command-W.
+  - Esc is recognised by key code as well as character in questions, Preferences, Find, the text
+    prompts and About; question key presses are logged as `LIFE NOTIFY key`. About also closes with
+    Command-period and Command-W.
   - Find and the text prompts open centred in the alert position; Find's window is titled "Find".
   - About shows "© 2026 Chris Ruter".
-  - Preferences: OK is the system default button (the hand-drawn ring is gone); the pop-ups no
-    longer draw their value twice; menu items are in title case with US spelling; Cancel is as wide
-    as OK; Shift-Tab moves to the previous text field.
+  - Preferences: OK is the system default button (the hand-drawn ring is gone); on Mac OS 9 the
+    Notifications pop-ups no longer draw their value twice; menu items are in title case with US
+    spelling; Cancel is as wide as OK; Shift-Tab moves to the previous text field.
   - The Downloads window opens clear of the right edge of a 640 px screen; on Mac OS X, new browser
     windows stay clear of the Dock.
 - The default home page is now `about:lotus`, a built-in Lotus Navigator start page (under 2 KB,
@@ -133,8 +134,6 @@ hardware; no binary has been published.
   system font, and the window opens at top 44 so all of it fits a 640 × 480 screen.
 - Show Examples could leave the "Downloading" example notice stuck when a notice was refused by the
   flood limit; a refused post no longer replaces the tracked notice.
-- Questions: Esc is also matched by its key code (the first Esc was ignored on Mac OS 9.2.2 in the
-  emulated run); key events are logged as `LIFE NOTIFY key` to confirm on hardware.
 - Pages taller than 32,767 pixels can be scrolled to the end. The scroll bars hold 16-bit values, so
   the scroll range was cut off at y=32767 (a 1,100-row table stopped at row 384); the full range is
   now mapped onto the scroll bar.

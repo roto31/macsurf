@@ -55,10 +55,10 @@ import argparse
 import os
 import struct
 import sys
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageChops, ImageFilter
 except ImportError:
     sys.stderr.write(
         "error: Pillow is required. install with: pip install Pillow\n"
@@ -204,7 +204,19 @@ def _icon_1bit_from_rgb(rgb: Image.Image,
     icons a clean two-tone appearance even on coloured desktops."""
     gray = rgb.convert("L")
     raw = gray.point(lambda p: 255 if p < luma_threshold else 0)
+    raw = ImageChops.lighter(raw, _mask_outline(mask))
     return Image.composite(raw, Image.new("L", rgb.size, 0), mask).convert("1")
+
+
+def _mask_outline(mask: Image.Image) -> Image.Image:
+    """Edge pixels of the mask (set, with a clear 4-neighbour), as L 0/255.
+
+    Light artwork (pastel petals) falls above the luma threshold and would
+    vanish from the black-and-white icon; a black outline along the mask keeps
+    the silhouette, as era black-and-white icons do."""
+    solid = mask.convert("L")
+    eroded = solid.filter(ImageFilter.MinFilter(3))
+    return ImageChops.subtract(solid, eroded)
 
 
 def _pack_1bit(img: Image.Image) -> bytes:
@@ -261,15 +273,22 @@ def _pack_8bit(img: Image.Image,
     return bytes(out)
 
 
-def build_family(src: Image.Image) -> IconFamily:
-    """Generate all six icon resources from one source PNG."""
+def build_family(src: Image.Image,
+                 small_src: Optional[Image.Image] = None) -> IconFamily:
+    """Generate all six icon resources from one source PNG.
+
+    small_src, when given, is a hand-tuned 16x16 drawing used as-is for
+    the ics# / ics4 / ics8 members instead of a downsample of src."""
     pal8 = build_mac_8bit_palette()
     pal4 = build_mac_4bit_palette()
     fam = IconFamily()
     for size, target in ((32, "large"), (16, "small")):
-        # PIL LANCZOS is a high-quality downsample appropriate for
-        # both icon planes (we'll threshold mask afterwards anyway).
-        scaled = src.resize((size, size), Image.LANCZOS)
+        if target == "small" and small_src is not None:
+            scaled = small_src.resize((size, size), Image.NEAREST)
+        else:
+            # PIL LANCZOS is a high-quality downsample appropriate for
+            # both icon planes (we'll threshold mask afterwards anyway).
+            scaled = src.resize((size, size), Image.LANCZOS)
         mask_img = _mask_from_alpha(scaled)
         rgb_img = _composite_onto_white(scaled)
         icon_1bit = _icon_1bit_from_rgb(rgb_img, mask_img)
@@ -740,6 +759,9 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--src", required=True,
                     help="source 512x512 RGBA PNG (e.g. puffpuff.png)")
+    ap.add_argument("--src-small", default=None,
+                    help="optional hand-tuned 16x16 RGBA PNG for the small "
+                         "icon members (default: downsample --src)")
     ap.add_argument("--rez", required=True,
                     help="output Rez source (e.g. tools/MacSurfIcon.r)")
     ap.add_argument("--rsrc", required=True,
@@ -784,7 +806,14 @@ def main() -> int:
     if src.mode != "RGBA":
         src = src.convert("RGBA")
 
-    fam = build_family(src)
+    small_src = None
+    if args.src_small:
+        small_src = Image.open(args.src_small).convert("RGBA")
+        if small_src.size != (16, 16):
+            sys.stderr.write("error: --src-small must be 16x16\n")
+            return 2
+
+    fam = build_family(src, small_src)
 
     # ---- Rez text ----
     rez_text = emit_rez_text(fam, args.icon_id, args.creator)

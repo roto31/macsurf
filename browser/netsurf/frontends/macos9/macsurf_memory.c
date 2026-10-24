@@ -70,21 +70,13 @@ static void macsurf_oom_panic(size_t size)
     macsurf_debug_log_flush();
 
 #ifdef __MACOS9__
-    /* 2. Build a human-readable alert message.
-     * sprintf is stack-safe and links on CW8 MSL
-     * (vsnprintf is the problematic one). */
-    {
-        char body_c[256];
-
-        sprintf(body_c,
-            "Need %ld bytes, largest gap %ld bytes "
-            "(free %ld). Heap is too fragmented to continue.",
-            (long)size, max_blk, free_mem);
-
-        /* 3. Show the alert (blocks until dismissed). */
-        macos9_notify_emergency_alert(
-            "Lotus Navigator: Out of Contiguous Memory", body_c, 1);
-    }
+    /* 2. Show the alert (blocks until dismissed). The byte counts are in
+     * the log line above, not in the alert. */
+    macos9_notify_emergency_alert(
+        "Lotus Navigator ran out of memory",
+        "Lotus Navigator must quit. Quit other applications, or give "
+        "Lotus Navigator more memory in its Get Info window, then open "
+        "it again.", 1);
 
     /* 4. Clean exit - cooperative-app safe. */
     ExitToShell();

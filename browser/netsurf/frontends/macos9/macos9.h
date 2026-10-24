@@ -333,6 +333,7 @@ void macos9_history_window_show(struct gui_window *g);
 /* fixes706 - Clear Cache menu handler (wipes disk cache + dead-host state). */
 void macos9_cache_clear_ui(void);
 int  macos9_chrome_confirm_delete(const char *msg);
+int  macos9_chrome_confirm_clear_history(void);
 int  macos9_chrome_ask(const char *msg, const char *detail,
 	const char *yes_label, const char *no_label);
 int  macos9_chrome_ask_with_checkbox(const char *msg, const char *detail,
@@ -418,6 +419,7 @@ extern struct gui_window *initial_win;
 void macos9_handle_mouse_down(const EventRecord *event);
 void macos9_handle_key_down(const EventRecord *event);
 void macos9_handle_update(const EventRecord *event);
+int  macos9_key_is_escape(const EventRecord *ev);
 /* Throttled repaint during tight StillDown() drag loops (scrollbar + text
  * selection). Only paints if >= N ticks have elapsed since *last_tick;
  * updates *last_tick when it does.  gw may be NULL (no-op). */

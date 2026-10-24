@@ -250,6 +250,10 @@ void macos9_prefs_apply_live(void)
 
 #define PREFS_W_W 480
 #define PREFS_W_H 420
+/* Content top 44 keeps the title bar below the menu bar and the whole window
+ * on a 640x480 screen (44 + 420 = 464). */
+#define PREFS_W_LEFT 110
+#define PREFS_W_TOP 44
 #define PREFS_BANNER_H 40
 #define PREFS_PANEL_TOP 48
 #define PREFS_PANEL_BOT 368
@@ -307,8 +311,8 @@ static const struct prefs_popup_def s_popup_perhost = {
 
 /* Notifications panel: values are Lotus Notify core ln_position / ln_style. */
 static const char *s_lbl_position[] = {
-	"Upper right corner", "Upper left corner", "Lower right corner",
-	"Lower left corner", "Top centre", "Centre of the screen"
+	"Upper Right Corner", "Upper Left Corner", "Lower Right Corner",
+	"Lower Left Corner", "Top Center", "Center of the Screen"
 };
 static const int s_val_position[] = {
 	LN_POSITION_UPPER_RIGHT, LN_POSITION_UPPER_LEFT, LN_POSITION_LOWER_RIGHT,
@@ -324,7 +328,7 @@ static const struct prefs_popup_def s_popup_duration = {
 	s_lbl_duration, s_val_duration, 5
 };
 
-static const char *s_lbl_style[] = { "Default", "Banner", "Pop-up box", "None" };
+static const char *s_lbl_style[] = { "Default", "Banner", "Pop-up Box", "None" };
 static const int s_val_style[] = { LN_STYLE_DEFAULT, LN_STYLE_BANNER, LN_STYLE_POPUP, LN_STYLE_NONE };
 static const struct prefs_popup_def s_popup_style = {
 	s_lbl_style, s_val_style, 4
@@ -399,7 +403,7 @@ struct prefs_win {
 
 /* Layout bounds. Order: {top, left, bottom, right}. */
 static const Rect s_btn_defaults_rect     = { 358,  20, 382, 144 };
-static const Rect s_btn_cancel_rect       = { 358, 276, 382, 356 };
+static const Rect s_btn_cancel_rect       = { 358, 268, 382, 356 };
 static const Rect s_btn_ok_rect           = { 358, 372, 382, 460 };
 static const Rect s_tabs_rect             = {  42,  12, 348, 468 };
 
@@ -591,12 +595,19 @@ static ControlRef prefs_create_tabs(WindowRef win, const Rect *r,
 		const char **labels, int count, int initial_tab)
 {
 	ControlRef c;
+	ControlFontStyleRec font_style;
 	int i;
 	if (initial_tab < 1) initial_tab = 1;
 	if (initial_tab > count) initial_tab = count;
 	c = NewControl(win, r, "\p", true, 0, 1, (short)count,
 		kControlTabSmallProc, 0);
 	if (c == NULL) return NULL;
+	/* Mac OS 9 draws tab labels in the system font, which makes six tabs
+	 * wider than the control; the small system font fits them. */
+	memset(&font_style, 0, sizeof font_style);
+	font_style.flags = kControlUseFontMask;
+	font_style.font = kControlFontSmallSystemFont;
+	(void)SetControlFontStyle(c, &font_style);
 	for (i = 1; i <= count; i++) {
 		ControlTabInfoRec info;
 		info.version = kControlTabInfoVersionZero;
@@ -1058,15 +1069,6 @@ static void prefs_draw_cstr(short h, short v, const char *text)
 	DrawText(text, 0, (short)strlen(text));
 }
 
-static void prefs_popup_label(ControlRef c, const struct prefs_popup_def *def, const Rect *r)
-{
-	int idx;
-	if (c == NULL) return;
-	idx = GetControlValue(c) - 1;
-	if (idx < 0 || idx >= def->count) return;
-	prefs_draw_cstr((short)(r->left + 8), (short)(r->top + 15), def->labels[idx]);
-}
-
 static void prefs_paint_notify(struct prefs_win *pw)
 {
 	RGBColor black_c;
@@ -1094,12 +1096,7 @@ static void prefs_paint_notify(struct prefs_win *pw)
 	}
 	prefs_draw_cstr((short)(s_ck_sound_ctrl_rect.left + 22), (short)(s_ck_sound_ctrl_rect.top + 14),
 		"Play a sound");
-
-	prefs_popup_label(pw->pp_position, &s_popup_position, &s_pp_position_rect);
-	prefs_popup_label(pw->pp_duration, &s_popup_duration, &s_pp_duration_rect);
-	for (i = 0; i < PREFS_NOTIFY_STYLES; i++) {
-		prefs_popup_label(pw->pp_style[i], &s_popup_style, &s_pp_style_rect[i]);
-	}
+	(void)pw;
 
 	RGBForeColor(&gray_c);
 	TextFont(3); TextSize(9);
@@ -1136,16 +1133,6 @@ static void prefs_paint(struct prefs_win *pw)
 	RGBForeColor(&sep_c);
 	MoveTo(0, PREFS_PANEL_BOT + 2);
 	LineTo(PREFS_W_W, PREFS_PANEL_BOT + 2);
-
-	/* Default button ring around OK */
-	{
-		Rect ok_ring = s_btn_ok_rect;
-		InsetRect(&ok_ring, -4, -4);
-		PenSize(3, 3);
-		RGBForeColor(&black_c);
-		FrameRoundRect(&ok_ring, 16, 16);
-		PenSize(1, 1);
-	}
 
 	/* Draw controls: category tabs frame & visible panel controls */
 	RGBForeColor(&saved);
@@ -1383,17 +1370,24 @@ static void prefs_te_blur(struct prefs_win *pw)
 	pw->active_te = NULL;
 }
 
-static void prefs_te_tab(struct prefs_win *pw)
+/* Tab moves to the next text field, Shift-Tab to the previous one. */
+static void prefs_te_tab(struct prefs_win *pw, int backward)
 {
+	TEHandle fields[3];
 	TEHandle next;
+	int count = 0;
+	int current = -1;
+	int i;
 	if (pw->cat != PREFS_CAT_GENERAL) return;
-	next = NULL;
-	if (pw->active_te == pw->te_home) next = pw->te_ww;
-	else if (pw->active_te == pw->te_ww) next = pw->te_wh;
-	else next = pw->te_home;
-	if (next == NULL) next = pw->te_ww;
-	if (next == NULL) next = pw->te_wh;
-	if (next == NULL) return;
+	if (pw->te_home != NULL) fields[count++] = pw->te_home;
+	if (pw->te_ww != NULL) fields[count++] = pw->te_ww;
+	if (pw->te_wh != NULL) fields[count++] = pw->te_wh;
+	if (count == 0) return;
+	for (i = 0; i < count; i++) {
+		if (fields[i] == pw->active_te) current = i;
+	}
+	if (current < 0) next = fields[0];
+	else next = fields[(current + (backward ? count - 1 : 1)) % count];
 	if (pw->active_te != NULL && pw->active_te != next)
 		TEDeactivate(pw->active_te);
 	pw->active_te = next;
@@ -1603,7 +1597,7 @@ static int prefs_key(struct prefs_win *pw, const EventRecord *ev)
 		}
 		return 0;
 	}
-	if (ch == 0x1B) return 1;  /* Esc = cancel */
+	if (macos9_key_is_escape(ev)) return 1;  /* Esc = cancel */
 	if (ch == '\r' || ch == 0x03) {  /* Return / Enter = OK */
 		prefs_apply_from_ui(pw);
 		macos9_prefs_save();
@@ -1611,7 +1605,7 @@ static int prefs_key(struct prefs_win *pw, const EventRecord *ev)
 		return 1;
 	}
 	if (ch == 0x09) {  /* Tab cycles text fields */
-		prefs_te_tab(pw);
+		prefs_te_tab(pw, (ev->modifiers & shiftKey) != 0);
 		return 0;
 	}
 	if (pw->active_te != NULL) TEKey(ch, pw->active_te);
@@ -1636,7 +1630,8 @@ void macos9_prefs_show(void)
 		return;
 	}
 
-	SetRect(&wb, 110, 80, (short)(110 + PREFS_W_W), (short)(80 + PREFS_W_H));
+	SetRect(&wb, PREFS_W_LEFT, PREFS_W_TOP, (short)(PREFS_W_LEFT + PREFS_W_W),
+		(short)(PREFS_W_TOP + PREFS_W_H));
 	if (CreateNewWindow(kDocumentWindowClass, kWindowCloseBoxAttribute,
 			&wb, &pw.win) != noErr || pw.win == NULL) {
 		return;
@@ -1657,6 +1652,11 @@ void macos9_prefs_show(void)
 	pw.btn_defaults = prefs_create_button(pw.win, &s_btn_defaults_rect, "Restore Defaults");
 	pw.btn_cancel   = prefs_create_button(pw.win, &s_btn_cancel_rect, "Cancel");
 	pw.btn_ok       = prefs_create_button(pw.win, &s_btn_ok_rect, "OK");
+	if (pw.btn_ok != NULL) {
+		Boolean is_default = true;
+		SetControlData(pw.btn_ok, kControlEntireControl,
+			kControlPushButtonDefaultTag, sizeof is_default, (Ptr)&is_default);
+	}
 
 	/* Category tabs (created before panel controls to establish container frame) */
 	pw.tabs = prefs_create_tabs(pw.win, &s_tabs_rect, s_lbl_cat,
@@ -1696,8 +1696,8 @@ void macos9_prefs_show(void)
 		nsoption_bool(send_referer));
 	pw.ck_dnt     = prefs_create_checkbox(pw.win, &s_ck_dnt_ctrl_rect, "Send Do Not Track request",
 		nsoption_bool(do_not_track));
-	pw.btn_cache  = prefs_create_button(pw.win, &s_btn_cache_rect, "Clear Cache...");
-	pw.btn_hist   = prefs_create_button(pw.win, &s_btn_hist_rect, "Clear History...");
+	pw.btn_cache  = prefs_create_button(pw.win, &s_btn_cache_rect, "Clear Cache");
+	pw.btn_hist   = prefs_create_button(pw.win, &s_btn_hist_rect, "Clear History\311");
 
 	/* Advanced popups */
 	pw.m_fetch = prefs_popup_menu(&s_popup_fetch, PREFS_MENU_ID_FETCH);

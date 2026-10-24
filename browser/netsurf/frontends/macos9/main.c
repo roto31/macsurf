@@ -244,6 +244,9 @@ static void macos9_init_menus(void) {
 	 * menu when MacSurf is frontmost" bug) - and the app never dispatched
 	 * them anyway (the MENU_APPLE handler only acts on item 1 = About).
 	 * The system's single auto-added copy is the correct one. */
+	/* Mac OS X app menu items carry no ellipsis; Mac OS 9 keeps it. */
+	if (macsurf_os_is_osx())
+		SetMenuItemText(apple_menu, 1, (ConstStr255Param)"\pAbout Lotus Navigator");
 	InsertMenu(apple_menu, 0);
 
 	file_menu = NewMenu(MENU_FILE, "\pFile");
@@ -257,6 +260,11 @@ static void macos9_init_menus(void) {
 #ifndef LOTUS_DEBUG_LOG_UPLOAD_URL
 	DisableMenuItem(file_menu, ITEM_FILE_SENDLOG);
 #endif
+	/* On Mac OS X Quit lives in the application menu (Quit Apple event). */
+	if (macsurf_os_is_osx()) {
+		DeleteMenuItem(file_menu, ITEM_FILE_QUIT);
+		DeleteMenuItem(file_menu, ITEM_FILE_QUIT - 1);
+	}
 	InsertMenu(file_menu, 0);
 
 	edit_menu = NewMenu(MENU_EDIT, "\pEdit");
@@ -276,7 +284,8 @@ static void macos9_init_menus(void) {
 	AppendMenu(go_menu, "\pReload/R");
 	AppendMenu(go_menu, "\p(-");
 	AppendMenu(go_menu, "\pHome/H");
-	InsertMenu(go_menu, 0);
+	/* Command-H is Hide on Mac OS X. */
+	if (macsurf_os_is_osx()) SetItemCmd(go_menu, ITEM_GO_HOME, 0);
 
 	/* fixes330 (#96 #45) - View menu with View Source + Find. */
 	{
@@ -294,7 +303,7 @@ static void macos9_init_menus(void) {
 		AppendMenu(view_menu, "\pZoom Out/-");            /* 6 */
 		AppendMenu(view_menu, "\pActual Size/0");         /* 7 */
 		AppendMenu(view_menu, "\p(-");                    /* 8 */
-		AppendMenu(view_menu, "\pDownloads\311/J");       /* 9 */
+		AppendMenu(view_menu, "\pDownloads/J");          /* 9 */
 		/* LAN proxy (macos9_proxy_mac.c). The status line's text is
 		 * set later with SetMenuItemText, which unlike AppendMenu does
 		 * not treat '(' as a metacharacter. */
@@ -305,6 +314,7 @@ static void macos9_init_menus(void) {
 		AppendMenu(view_menu, "\pProxy");                 /* 14 */
 		InsertMenu(view_menu, 0);
 	}
+	InsertMenu(go_menu, 0);
 
 	/* fixes645 (#48) - Bookmarks menu. Item 1 = Add, item 2 = separator,
 	 * items 3+ are the saved bookmarks themselves (filled in by
@@ -323,9 +333,9 @@ static void macos9_init_menus(void) {
 	 * macos9_history_init below and rebuilt on each menu-bar click. */
 	{
 		MenuHandle history_menu = NewMenu(MENU_HISTORY, "\pHistory");
-		AppendMenu(history_menu, "\pShow All History\311/Y");
+		AppendMenu(history_menu, "\pShow All History/Y");
 		AppendMenu(history_menu, "\pClear History\311");
-		AppendMenu(history_menu, "\pClear Cache\311");
+		AppendMenu(history_menu, "\pClear Cache");
 		AppendMenu(history_menu, "\p(-");
 		InsertMenu(history_menu, 0);
 	}
@@ -618,7 +628,7 @@ static void macos9_handle_menu(short menu_id, short item) {
 		if (item == ITEM_HIST_SHOW_ALL) {
 			macos9_history_window_show(gw);
 		} else if (item == ITEM_HIST_CLEAR) {
-			if (macos9_chrome_confirm_delete("Clear entire browsing history?"))
+			if (macos9_chrome_confirm_clear_history())
 				macos9_history_clear();
 		} else if (item == ITEM_HIST_CLEAR_CACHE) {
 			macos9_cache_clear_ui();

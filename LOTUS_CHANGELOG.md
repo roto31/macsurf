@@ -67,6 +67,33 @@ hardware; no binary has been published.
 
 ### Changed
 
+- New Lotus emblem and Finder icons (CC0 1.0 artwork, generated 2026-10-23). The Mac OS 9 family
+  (`ICN#`, `icl4`, `icl8`, `ics#`, `ics4`, `ics8`) uses a separately drawn 16 px emblem, and the
+  black-and-white members now carry a black outline along the mask, so light artwork keeps its shape
+  (`tools/png_to_mac_icon_rez.py --src-small`).
+- Menus and dialogs follow the era Apple guidelines (1995 Macintosh HIG, 1997 Mac OS 8 HIG, 2008 Apple
+  HIG for Mac OS X):
+  - On Mac OS X, Quit is only in the application menu, Go > Home has no Command-H (that is Hide),
+    and About has no ellipsis.
+  - The Go menu follows View.
+  - Commands that open a window or act at once lose their ellipsis (Downloads, Show All History,
+    Clear Cache). Three periods become the ellipsis character (Clear History…, Rename…, Move…,
+    Import…, Change Folder…).
+  - Delete questions say "You can't undo this action."; the history question's button reads
+    Clear History. A page's `confirm()` uses the note icon. The bad proxy address alert has OK only.
+  - The out-of-memory alert says what to do instead of showing byte counts (those stay in the log).
+  - On Mac OS X, questions have no window title and note-level questions show the application icon.
+  - Pop-up notices no longer show a default ring on OK (Return never reaches a floating window).
+    Questions sit a fifth of the free height from the top instead of a third.
+  - Esc is recognised by key code as well as character in Preferences, Find, the text prompts and
+    About. About also closes with Command-period and Command-W.
+  - Find and the text prompts open centred in the alert position; Find's window is titled "Find".
+  - About shows "© 2026 Chris Ruter".
+  - Preferences: OK is the system default button (the hand-drawn ring is gone); the pop-ups no
+    longer draw their value twice; menu items are in title case with US spelling; Cancel is as wide
+    as OK; Shift-Tab moves to the previous text field.
+  - The Downloads window opens clear of the right edge of a 640 px screen; on Mac OS X, new browser
+    windows stay clear of the Dock.
 - The default home page is now `about:lotus`, a built-in Lotus Navigator start page (under 2 KB,
   no network needed, no outside links) with the Open Location, Reload and Home shortcuts and links
   to `about:cache` and `about:memory`. It replaces MacSurf's web home page. A home page set in
@@ -100,6 +127,14 @@ hardware; no binary has been published.
 
 ### Fixed
 
+- Accented letters on UTF-8 pages (é, ü and the rest of Mac Roman) drew as "?"; every character in
+  the Mac Roman table is now converted.
+- The Notifications tab in Preferences was cut off on Mac OS 9.2.2: the tab labels use the small
+  system font, and the window opens at top 44 so all of it fits a 640 × 480 screen.
+- Show Examples could leave the "Downloading" example notice stuck when a notice was refused by the
+  flood limit; a refused post no longer replaces the tracked notice.
+- Questions: Esc is also matched by its key code (the first Esc was ignored on Mac OS 9.2.2 in the
+  emulated run); key events are logged as `LIFE NOTIFY key` to confirm on hardware.
 - Pages taller than 32,767 pixels can be scrolled to the end. The scroll bars hold 16-bit values, so
   the scroll range was cut off at y=32767 (a 1,100-row table stopped at row 384); the full range is
   now mapped onto the scroll bar.
@@ -125,6 +160,10 @@ hardware; no binary has been published.
 
 ### Security
 
+- Plain-http responses marked `Cache-Control: no-store` or `private`, or carrying `Vary`, are no
+  longer written to the disk cache; https already followed this rule. Copies written by earlier
+  builds are deleted on lookup instead of being served. Signed-in pages fetched through a proxy
+  were being saved and replayed without asking the server.
 - WOFF2 web fonts are decoded by a new clean-room decoder written from the W3C WOFF 2.0
   Recommendation (GPL-2.0-only), replacing the google/woff2-derived port whose Apache-2.0 origin
   conflicted with GPL-2.0-only. Same entry point (`macos9_woff2_to_ttf`); output is capped at 32 MB

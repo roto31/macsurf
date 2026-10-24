@@ -266,8 +266,9 @@ void macos9_find_in_page(struct gui_window *g)
 		"fixes352b find: CreateNewWindow err=%ld win=%p",
 		(long)err, (void *)win);
 	if (err != noErr || win == NULL) return;
+	RepositionWindow(win, NULL, kWindowAlertPositionOnMainScreen);
 
-	c_to_pstring("Find in page", title);
+	c_to_pstring("Find", title);
 	SetWTitle(win, title);
 
 	GetPort(&saved_port);
@@ -327,7 +328,7 @@ void macos9_find_in_page(struct gui_window *g)
 			char ch = (char)(ev.message & charCodeMask);
 			if (ch == '\r' || ch == 0x03) {
 				accepted = true; done = true;
-			} else if (ch == 0x1B) {
+			} else if (macos9_key_is_escape(&ev)) {
 				done = true;
 			} else if ((ev.modifiers & cmdKey) &&
 			           (ch == '.' || ch == 'q' || ch == 'Q')) {
@@ -2035,7 +2036,7 @@ void macos9_history_window_show(struct gui_window *g)
 	SetRect(&r_done,  560, 386, 636, 410);   /* 76px - "Done" */
 
 	/* Native Controls */
-	btn_clr   = chrome_create_pushbutton(win, &r_clr,   "Clear History...");
+	btn_clr   = chrome_create_pushbutton(win, &r_clr,   "Clear History\311");
 	btn_del   = chrome_create_pushbutton(win, &r_del,   "Delete");
 	btn_visit = chrome_create_pushbutton(win, &r_visit, "Visit Page");
 	btn_done  = chrome_create_pushbutton(win, &r_done,  "Done");
@@ -2137,7 +2138,7 @@ void macos9_history_window_show(struct gui_window *g)
 				}
 				if (ctrl == btn_clr) {
 					if (TrackControl(btn_clr, lp, NULL)) {
-						if (chrome_confirm_delete("Clear entire browsing history?")) {
+						if (macos9_chrome_confirm_clear_history()) {
 							macos9_history_clear();
 							nrows = hw_build_rows(rows, cap, today_day, filter);
 							sel = hw_next_entry(rows, nrows, 0);
@@ -2542,6 +2543,7 @@ static int chrome_prompt_text(const char *title, const char *initial,
 	if (CreateNewWindow(kDocumentWindowClass, kWindowCloseBoxAttribute,
 			&wb, &win) != noErr || win == NULL)
 		return 0;
+	RepositionWindow(win, NULL, kWindowAlertPositionOnMainScreen);
 	c_to_pstring(title, pt);
 	SetWTitle(win, pt);
 	GetPort(&saved);
@@ -2590,7 +2592,7 @@ static int chrome_prompt_text(const char *title, const char *initial,
 		case autoKey: {
 			char ch = (char)(ev.message & charCodeMask);
 			if (ch == '\r' || ch == 0x03) { accepted = 1; done = 1; }
-			else if (ch == 0x1B) done = 1;
+			else if (macos9_key_is_escape(&ev)) done = 1;
 			else if ((ev.modifiers & cmdKey) && ch == '.') done = 1;
 			else TEKey(ch, te);
 			break;
@@ -2658,6 +2660,7 @@ static int chrome_prompt_text2(const char *title, const char *init_name,
 	if (CreateNewWindow(kDocumentWindowClass, kWindowCloseBoxAttribute,
 			&wb, &win) != noErr || win == NULL)
 		return 0;
+	RepositionWindow(win, NULL, kWindowAlertPositionOnMainScreen);
 	c_to_pstring(title, pt);
 	SetWTitle(win, pt);
 	GetPort(&saved);
@@ -2728,7 +2731,7 @@ static int chrome_prompt_text2(const char *title, const char *init_name,
 		case autoKey: {
 			char ch = (char)(ev.message & charCodeMask);
 			if (ch == '\r' || ch == 0x03) { accepted = 1; done = 1; }
-			else if (ch == 0x1B) done = 1;
+			else if (macos9_key_is_escape(&ev)) done = 1;
 			else if ((ev.modifiers & cmdKey) && ch == '.') done = 1;
 			else if (ch == 0x09) {   /* Tab switches fields */
 				if (active_field == 0) {
@@ -2808,19 +2811,30 @@ static int chrome_prompt_text2(const char *title, const char *init_name,
 	return accepted && out_name[0] != '\0';
 }
 
-/* Caution question with Delete / Cancel. Returns 1 if the user confirms. */
-int macos9_chrome_confirm_delete(const char *msg)
+/* Caution question with <action> / Cancel. Returns 1 if the user confirms. */
+static int chrome_confirm_destructive(const char *msg, const char *action)
 {
 	macos9_dialog dialog;
 
 	memset(&dialog, 0, sizeof dialog);
 	dialog.title = msg;
-	dialog.message = "";
+	dialog.message = "You can\325t undo this action.";
 	dialog.icon = LN_ICON_CAUTION;
-	dialog.buttons[0] = "Delete";
+	dialog.buttons[0] = action;
 	dialog.buttons[1] = "Cancel";
 	dialog.play_sound = 1;
 	return macos9_notify_ask(&dialog) == 0;
+}
+
+int macos9_chrome_confirm_delete(const char *msg)
+{
+	return chrome_confirm_destructive(msg, "Delete");
+}
+
+int macos9_chrome_confirm_clear_history(void)
+{
+	return chrome_confirm_destructive("Clear entire browsing history?",
+		"Clear History");
 }
 
 /* Note question with caller-labelled buttons and an optional checkbox
@@ -3260,9 +3274,9 @@ void macos9_bookmark_window_show(struct gui_window *g)
 	btn_new_bmk = chrome_create_pushbutton(win, &r_new_bmk, "+ Bookmark");
 	btn_new_fld = chrome_create_pushbutton(win, &r_new_fld, "+ Folder");
 	btn_del     = chrome_create_pushbutton(win, &r_del,     "Delete");
-	btn_rename  = chrome_create_pushbutton(win, &r_rename,  "Rename...");
-	btn_move    = chrome_create_pushbutton(win, &r_move,    "Move...");
-	btn_imp     = chrome_create_pushbutton(win, &r_imp,     "Import...");
+	btn_rename  = chrome_create_pushbutton(win, &r_rename,  "Rename\311");
+	btn_move    = chrome_create_pushbutton(win, &r_move,    "Move\311");
+	btn_imp     = chrome_create_pushbutton(win, &r_imp,     "Import\311");
 	btn_exp     = chrome_create_pushbutton(win, &r_exp,     "Export...");
 	btn_visit   = chrome_create_pushbutton(win, &r_visit,   "Visit Page");
 	btn_done    = chrome_create_pushbutton(win, &r_done,    "Done");
@@ -3770,7 +3784,7 @@ void macos9_bookmark_window_show(struct gui_window *g)
 				if (filter[0] != '\0')
 					DrawString("\pNo bookmarks match search query.");
 				else
-					DrawString("\pNo bookmarks saved. Choose \"Add Bookmark\" (Cmd-D) to save pages.");
+					DrawString("\pNo bookmarks saved. Choose \"Add Bookmark\" (Command-D) to save pages.");
 			}
 			dirty = 0;
 		}
@@ -3798,6 +3812,7 @@ void macos9_bookmark_window_show(struct gui_window *g)
 #else  /* !__MACOS9__ */
 void macos9_bookmark_window_show(struct gui_window *g) { (void)g; }
 int  macos9_chrome_confirm_delete(const char *msg) { (void)msg; return 1; }
+int  macos9_chrome_confirm_clear_history(void) { return 1; }
 int  macos9_chrome_ask(const char *msg, const char *detail,
 	const char *yes_label, const char *no_label)
 { (void)msg; (void)detail; (void)yes_label; (void)no_label; return 0; }
@@ -4108,6 +4123,7 @@ static void about_draw(GWorldPtr off, WindowRef win, const Rect *content,
 		about_center("Built on MacSurf by mplsllc   -   Native TLS 1.3", 190, 128);
 		about_fore(150, 165, 200, bri);
 		about_center("For Gary & Kaija", 190, 143);
+		about_center("\251 2026 Chris Ruter", 190, 158);
 	}
 
 	/* 6. scrolling supporter credits roll (clipped to a viewport) */
@@ -4115,7 +4131,7 @@ static void about_draw(GWorldPtr off, WindowRef win, const Rect *content,
 		Rect  vp;
 		short lineH = 16, i, cx = 190;
 		long  vph, cycle, offs;
-		SetRect(&vp, 24, 152, ABOUT_W - 24, 250);
+		SetRect(&vp, 24, 166, ABOUT_W - 24, 250);
 		vph   = vp.bottom - vp.top;
 		cycle = (long)ABOUT_ROLL_N * lineH + vph;
 		offs  = (elapsed / 3) % cycle;
@@ -4340,7 +4356,8 @@ void macos9_about_show(void)
 		case keyDown:
 		case autoKey: {
 			char ch = (char)(ev.message & charCodeMask);
-			if (ch == '\r' || ch == 0x03 || ch == 0x1B || ch == ' ')
+			if (ch == '\r' || ch == 0x03 || ch == ' ' || macos9_key_is_escape(&ev) ||
+			    ((ev.modifiers & cmdKey) && (ch == '.' || ch == 'w' || ch == 'W')))
 				done = 1;
 			break;
 		}
@@ -4381,7 +4398,7 @@ fallback:
 			LOTUS_APP_NAME " " LOTUS_APP_VERSION " - a web browser for Mac OS 9 and Mac OS X";
 
 		strcpy(p, "Native TLS 1.3 via macTLS. Built on MacSurf and NetSurf.\r"
-			"by mplsllc\r\r");
+			"by mplsllc\r\251 2026 Chris Ruter\r\r");
 		p += strlen(p);
 		for (i = 0; i < ABOUT_ROLL_N; i++) {
 			const char *t = about_roll[i].text;

@@ -709,7 +709,7 @@ static void dl_mgr_ensure(void)
 	const char *t = "Downloads";
 	size_t n;
 	if (g_dl_mgr_win != NULL) return;
-	SetRect(&b, 100, 120, 640, 460);  /* 540 x 340 px */
+	SetRect(&b, 90, 120, 630, 460);  /* 540 x 340 px, clear of a 640 px edge */
 	if (CreateNewWindow(kDocumentWindowClass,
 			kWindowCloseBoxAttribute | kWindowCollapseBoxAttribute,
 			&b, &g_dl_mgr_win) != noErr || g_dl_mgr_win == NULL) {
@@ -728,7 +728,7 @@ static void dl_mgr_ensure(void)
 
 	SetRect(&r_change_folder, 192, 40, 332, 64);
 	g_btn_change_folder = NewControl(g_dl_mgr_win, &r_change_folder,
-		"\pChange Folder...", true, 0, 0, 1, kControlPushButtonProc, 0);
+		"\pChange Folder\311", true, 0, 0, 1, kControlPushButtonProc, 0);
 
 	SetRect(&r_clear, 340, 40, 450, 64);
 	g_btn_clear = NewControl(g_dl_mgr_win, &r_clear,

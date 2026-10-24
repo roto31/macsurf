@@ -885,7 +885,7 @@ static int qjs_page_dialog(JSContext *ctx, const char *message, const char *canc
 	memset(&dialog, 0, sizeof dialog);
 	dialog.title = title;
 	dialog.message = message;
-	dialog.icon = cancel_label != NULL ? LN_ICON_CAUTION : LN_ICON_NOTE;
+	dialog.icon = LN_ICON_NOTE;
 	dialog.buttons[0] = "OK";
 	dialog.buttons[1] = cancel_label;
 	if (macos9_notify_page_offers_stop(g_qjs_dialog_pages[page].shown)) {

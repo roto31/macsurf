@@ -430,7 +430,7 @@ static void proxy_set_server(void)
 	    !macos9_proxy_host_is_private(host)) {
 		macos9_chrome_ask("That is not a local network proxy address.",
 			"Enter the proxy's numeric address on this network, "
-			"for example 192.168.1.120:8081.", "OK", "Cancel");
+			"for example 192.168.1.120:8081.", "OK", NULL);
 		return;
 	}
 	nsoption_set_charp(http_proxy_host, proxy_copy_string(host));

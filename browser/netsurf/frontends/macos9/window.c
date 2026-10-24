@@ -1518,8 +1518,13 @@ static struct gui_window *macos9_window_create(struct browser_window *bw, struct
 		short top;
 		short right;
 		short bot;
-		GetQDGlobalsScreenBits(&bm);
-		sb = bm.bounds;
+		/* Mac OS X: keep the window clear of the Dock. */
+		if (macsurf_os_is_osx()) {
+			GetAvailableWindowPositioningBounds(GetMainDevice(), &sb);
+		} else {
+			GetQDGlobalsScreenBits(&bm);
+			sb = bm.bounds;
+		}
 		sw = (short)(sb.right - sb.left);
 		sh = (short)(sb.bottom - sb.top);
 		want_w = 1024;

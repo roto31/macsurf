@@ -84,4 +84,9 @@ enum {
  * first "up" is not, and an unfinished probe changes nothing. */
 int macos9_notify_proxy_change(int *last_seen, int state);
 
+/* Show Examples tracks its Downloading notice by id. A post that was not shown
+ * returns 0 (flood limit, category off, style None, Do Not Disturb); keeping the
+ * tracked id then lets a notice already on screen count on to 100% and close. */
+long macos9_notify_example_progress_id(long tracked_id, long posted_id);
+
 #endif

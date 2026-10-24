@@ -81,6 +81,7 @@ void macos9_notify_settings_to_options(const macos9_notify_settings *settings)
 #define NOTIFY_TICKS          60
 #define NOTIFY_PROGRESS_STEP  10
 #define NOTIFY_BUTTON_FLASH   8
+#define NOTIFY_ESCAPE_KEY_CODE 0x35   /* virtual key code of Esc on ADB/USB keyboards */
 
 typedef struct {
 	int           used;
@@ -157,12 +158,32 @@ static OSType notify_icon_kind(int icon, int type)
 	return kAlertNoteIcon;
 }
 
+static OSErr notify_app_icon_ref(IconRef *ref)
+{
+	ProcessSerialNumber psn;
+	ProcessInfoRec info;
+	FSSpec app_spec;
+	SInt16 label;
+
+	psn.highLongOfPSN = 0;
+	psn.lowLongOfPSN = kCurrentProcess;
+	memset(&info, 0, sizeof info);
+	info.processInfoLength = sizeof info;
+	info.processAppSpec = &app_spec;
+	if (GetProcessInformation(&psn, &info) != noErr) return fnfErr;
+	return GetIconRefFromFile(&app_spec, ref, &label);
+}
+
 static void notify_plot_icon(OSType kind, short left, short top)
 {
 	IconRef ref;
 	Rect r;
 
-	if (GetIconRef(kOnSystemDisk, kSystemIconsCreator, kind, &ref) != noErr) return;
+	/* Mac OS X alerts show the application icon in place of the note icon. */
+	if (kind != kAlertNoteIcon || !macsurf_os_is_osx() ||
+	    notify_app_icon_ref(&ref) != noErr) {
+		if (GetIconRef(kOnSystemDisk, kSystemIconsCreator, kind, &ref) != noErr) return;
+	}
 	SetRect(&r, left, top, (short)(left + NOTIFY_ICON), (short)(top + NOTIFY_ICON));
 	PlotIconRef(&r, kAlignNone, kTransformNone, kIconServicesNormalUsageFlag, ref);
 	ReleaseIconRef(ref);
@@ -585,6 +606,10 @@ static long notify_post_unguarded(const macos9_notify_settings *settings, const 
 		for (i = 0; i < NOTIFY_SLOTS; i++) {
 			s = &s_slots[i];
 			if (s->used && strcmp(s->thread, notice->thread_id) == 0) {
+				if (s->progress >= 0) {
+					s->progress = 0;
+					s->expires = 0;
+				}
 				notify_to_roman(notice->title, s->title, sizeof s->title);
 				notify_to_roman(notice->message, s->message, sizeof s->message);
 				SetPortWindowPort(s->win);
@@ -630,17 +655,13 @@ static long notify_post_unguarded(const macos9_notify_settings *settings, const 
 	s->frame_top = notify_frame_top(s->win);
 	if (s->style == LN_STYLE_POPUP) {
 		ControlRef root = NULL;
-		Boolean is_default = true;
 
 		CreateRootControl(s->win, &root);
 		SetRect(&button, (short)(s->width - NOTIFY_PAD - NOTIFY_BUTTON_MIN_W),
 			(short)(s->height - NOTIFY_PAD - NOTIFY_BUTTON_H),
 			(short)(s->width - NOTIFY_PAD), (short)(s->height - NOTIFY_PAD));
 		s->ok_button = NewControl(s->win, &button, "\pOK", true, 0, 0, 0, kControlPushButtonProc, 0);
-		if (s->ok_button != NULL) {
-			SetControlData(s->ok_button, kControlEntireControl, kControlPushButtonDefaultTag,
-				sizeof is_default, (Ptr)&is_default);
-		}
+		/* No default ring: a floating window never receives Return. */
 		if (s->has_file) notify_add_action_button(s, action_label);
 	}
 	notify_layout();
@@ -941,17 +962,29 @@ static void notify_dialog_flash(ControlRef button)
 	HiliteControl(button, kControlNoPart);
 }
 
+/* Esc by character or by key code, so an Esc key event that arrives without
+ * the 0x1B character still cancels. */
+int macos9_key_is_escape(const EventRecord *ev)
+{
+	char ch = (char)(ev->message & charCodeMask);
+	int key_code = (int)((ev->message & keyCodeMask) >> 8);
+	return ch == 0x1B || key_code == NOTIFY_ESCAPE_KEY_CODE;
+}
+
 /* Returns the button index for a key, or -1. */
 static int notify_dialog_key(notify_dialog_state *d, const EventRecord *ev)
 {
 	char ch = (char)(ev->message & charCodeMask);
+	int key_code = (int)((ev->message & keyCodeMask) >> 8);
 	int cancel = d->button_count > 1 ? 1 : 0;
 
+	macsurf_debug_log_writef("LIFE NOTIFY key what=%d char=%d code=0x%02x mods=0x%04x",
+		(int)ev->what, (int)(unsigned char)ch, key_code, (unsigned int)ev->modifiers);
 	if (ch == '\r' || ch == 0x03) {
 		notify_dialog_flash(d->buttons[0]);
 		return 0;
 	}
-	if (ch == 0x1B || ((ev->modifiers & cmdKey) && ch == '.')) {
+	if (macos9_key_is_escape(ev) || ((ev->modifiers & cmdKey) && ch == '.')) {
 		notify_dialog_flash(d->buttons[cancel]);
 		return cancel;
 	}
@@ -1035,7 +1068,7 @@ static int notify_ask_with(const macos9_notify_settings *settings, macos9_dialog
 	GetPort(&saved);
 	SetPortWindowPort(d.win);
 	SetThemeWindowBackground(d.win, kThemeBrushMovableModalBackground, false);
-	notify_pstring("Lotus Navigator", window_title);
+	notify_pstring(macsurf_os_is_osx() ? "" : "Lotus Navigator", window_title);
 	SetWTitle(d.win, window_title);
 
 	notify_usable(&usable);
@@ -1133,14 +1166,18 @@ void macos9_notify_show_examples(const macos9_notify_settings *settings)
 	macos9_dialog question;
 	char result_text[64];
 	int answer;
+	long progress_id;
 
 	notify_example(settings, LN_TYPE_INFO, "housekeeping", NULL, "Information",
 		"This is how Lotus Navigator tells you something finished. Click to open your start page.",
 		MACSURF_HOME_URL);
-	s_example_progress = 0;
-	s_example_next_tick = TickCount() + NOTIFY_TICKS;
-	s_example_progress_id = notify_example(settings, LN_TYPE_PROGRESS, "downloads", "example-progress",
+	progress_id = notify_example(settings, LN_TYPE_PROGRESS, "downloads", "example-progress",
 		"Downloading", "lotus-navigator.sit, 0%", NULL);
+	if (progress_id != 0) {
+		s_example_progress = 0;
+		s_example_next_tick = TickCount() + NOTIFY_TICKS;
+	}
+	s_example_progress_id = macos9_notify_example_progress_id(s_example_progress_id, progress_id);
 	notify_example(settings, LN_TYPE_WARNING, "proxy", NULL, "Proxy stopped answering",
 		"192.168.1.120:8081 did not answer, so pages load directly until it comes back.", NULL);
 	notify_example(settings, LN_TYPE_ERROR, "downloads", NULL, "Download failed",

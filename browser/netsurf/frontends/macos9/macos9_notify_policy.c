@@ -100,7 +100,7 @@ void macos9_notify_place_alert(const macos9_notify_rect *usable, int width, int 
 	int spare_height = usable->bottom - usable->top - height;
 
 	out->left = (usable->left + usable->right - width) / 2;
-	out->top = usable->top + (spare_height > 0 ? spare_height / 3 : 0);
+	out->top = usable->top + (spare_height > 0 ? spare_height / 5 : 0);
 	out->right = out->left + width;
 	out->bottom = out->top + height;
 }
@@ -141,4 +141,9 @@ int macos9_notify_proxy_change(int *last_seen, int state)
 	if (state == previous) return MACOS9_NOTIFY_PROXY_QUIET;
 	if (state == MACOS9_PROXY_DOWN) return MACOS9_NOTIFY_PROXY_STOPPED;
 	return previous == MACOS9_PROXY_DOWN ? MACOS9_NOTIFY_PROXY_BACK : MACOS9_NOTIFY_PROXY_QUIET;
+}
+
+long macos9_notify_example_progress_id(long tracked_id, long posted_id)
+{
+	return posted_id != 0 ? posted_id : tracked_id;
 }

@@ -613,7 +613,7 @@ static const char LOTUS_START_PAGE[] =
 	"<table>"
 	"<tr><td>Command-L</td><td>Open Location: select the location bar</td></tr>"
 	"<tr><td>Command-R</td><td>Reload the page</td></tr>"
-	"<tr><td>Command-H</td><td>Go to your home page</td></tr>"
+	"<tr><td>Command-[ and Command-]</td><td>Go back and forward</td></tr>"
 	"</table>"
 	"<p>To start somewhere else, open Preferences and change the home page.</p>"
 	"<p>Diagnostics: <a href=\"about:cache\">about:cache</a> "
